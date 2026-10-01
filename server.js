@@ -89,7 +89,7 @@ wss.on('connection', ws => {
       if (m.op == 'takeover') { if (!c.name) return err('Enter your name first'); hostToken = c.token; persist() }
       else if (m.op == 'reset') {
         table.reset(); for (const k in auth) delete auth[k]; hostToken = '';
-        for (const o of clients) o.name = ''; persist();
+        for (const o of clients) { o.name = ''; o.token = ''; send(o, {t: 'reset'}) } persist(); return;
       }
       else if (m.op == 'forget') {
         const n = String(m.name || ''), e = table.forget(n); if (e) return err(e);

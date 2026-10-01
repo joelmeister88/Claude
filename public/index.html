@@ -57,6 +57,8 @@ function connect(){
  ws.onopen=()=>{retry=0;$('#conn').hidden=true;ws.send(JSON.stringify({t:'hello',token,hostKey}))};
  ws.onmessage=e=>{const m=JSON.parse(e.data);
   if(m.t=='state'){S=m.s;off=Date.now()-m.now;if(me!==m.you.name)renaming=false;me=m.you.name;host=m.you.host;admin=m.you.admin;render()}
+  // the table was reset: start this device over from scratch (an admin password stays remembered)
+  else if(m.t=='reset'){try{localStorage.removeItem('pn_token')}catch(x){}location.reload()}
   else if(m.t=='token'){token=m.token;try{localStorage.setItem('pn_token',token)}catch(x){}}
   else if(m.t=='adminok'){hostKey=m.key;showKey=false;try{localStorage.setItem('pn_host',hostKey)}catch(x){}note('Admin unlocked')}
   else if(m.t=='badkey'){hostKey='';try{localStorage.removeItem('pn_host')}catch(x){}note('That admin link is not valid')}
@@ -79,13 +81,13 @@ function render(){const m=$('#main');
  if(!S){put(m,'<div class="p">Connecting to the table…</div>');return}
  if(!me||renaming){const on=S.online||[],k=S.known.map(n=>on.includes(n)&&n!==me?`<button disabled>${esc(n)} <small>(here)</small></button>`:`<button data-a="pick" data-v="${esc(n)}">${esc(n)}${S.players[n]?` <small>· ${S.players[n].chips}</small>`:''}</button>`).join('');
   put(m,`<div class="p">${k?`<b>Who are you?</b><div class="names">${k}</div><h4>New here?</h4>`:'<b>Your name</b>'}<small>First name and last initial, like “Joel L”</small><div class="row"><input id="nm" maxlength="12" placeholder="First name + initial" style="flex:1" autocomplete="nickname"><button class="g" data-a="name">Join</button>${renaming?'<button data-a="unrename">Cancel</button>':''}</div></div>`);
-  $('#lobby').innerHTML='';renderHost();renderAdmin();return}
+  put($('#lobby'),'');renderHost();renderAdmin();return}
  const H=S.hand,my=S.seats.indexOf(me),inH=H&&H.ps.includes(my)&&!H.fold[my],pl=S.players[me],pot=H?Object.values(H.tot).reduce((a,b)=>a+b,0):0;
  const occ=S.seats.map((n,i)=>n?i:-1).filter(i=>i>=0),N=Math.max(occ.length,1),mr=Math.max(0,occ.indexOf(my));
  let seats='';for(let r=0;r<occ.length;r++){const i=occ[r],a=(r-mr)*2*Math.PI/N,x=50-41*Math.sin(a),y=50+42*Math.cos(a),n=S.seats[i];
   const ih=H&&H.ps.includes(i),fo=ih&&H.fold[i];
   const cards=ih&&!fo?'<br>'+H.h[i].map(c=>ch(H.show?c:null,'sm')).join(''):'';
-  seats+=`<div class="st ${H&&!H.done&&H.turn==i?'t':''} ${fo?'f':''} ${i==my?'me':''}" style="left:${x}%;top:${y}%"><b>${(H&&!H.done?H.btn:S.dealer)==i?'<span class="d">D</span>':''}${esc(n)}</b>${S.players[n].chips}${cards}${ih&&H.bet[i]?`<div class="bet"><i class="ch"></i>${H.bet[i]}</div>`:''}</div>`}
+  seats+=`<div class="st ${H&&!H.done&&H.turn==i?'t':''} ${fo?'f':''} ${i==my?'me':''}" style="left:${x}%;top:${y}%"><b>${(H&&!H.done?H.btn:S.dealer)==i?'<span class="d">D</span>':''}${n===S.hostName?'<span title="Host">👑</span>':''}${esc(n)}</b>${S.players[n].chips}${cards}${ih&&H.bet[i]?`<div class="bet"><i class="ch"></i>${H.bet[i]}</div>`:''}</div>`}
  const board=H?[0,1,2,3,4].map(k=>H.board[k]!=null?ch(H.board[k],'bd'):'<i class="c e bd"></i>').join(''):'';
  const live=H&&!H.done,myDeal=!live&&my>=0&&S.dealer==my&&S.dealDl>0,dealer=S.seats[S.dealer];
  const who=`<b>${esc(me)}</b> <button data-a="rename" style="padding:2px 8px;font-size:12px">change</button>`;
@@ -110,7 +112,7 @@ function render(){const m=$('#main');
  lastN=S.n;renderLobby();renderHost();renderAdmin();tick()}
 // people with chips who aren't sitting at the table
 function renderLobby(){const on=S.online||[],away=Object.keys(S.players).filter(n=>!S.players[n].bot&&!S.seats.includes(n)&&S.players[n].chips>0).sort();
- put($('#lobby'),`<div class="p"><small>Host: <b>${esc(S.hostName||'nobody yet')}</b></small>${away.length?`<h4>Not at the table</h4>${away.map(n=>`<div class="row" style="margin-top:2px"><span style="flex:1">${esc(n)}${on.includes(n)?'<i class="dot" title="online"></i>':''}${S.pend[n]?' <small>(wants a seat)</small>':''}</span><b>${S.players[n].chips}</b></div>`).join('')}`:''}</div>`)}
+ put($('#lobby'),`<div class="p"><small>👑 Host: <b>${esc(S.hostName||'nobody yet')}</b></small>${away.length?`<h4>Not at the table</h4>${away.map(n=>`<div class="row" style="margin-top:2px"><span style="flex:1">${esc(n)}${on.includes(n)?'<i class="dot" title="online"></i>':''}${S.pend[n]?' <small>(wants a seat)</small>':''}</span><b>${S.players[n].chips}</b></div>`).join('')}`:''}</div>`)}
 function renderAdmin(){const e=$('#admin'),f=document.activeElement;if(f&&f.tagName=='INPUT'&&e.contains(f))return;
  if(!admin){put(e,showKey?`<div class="p"><b>Admin</b><div class="row"><input id="ak" type="password" placeholder="Password" style="flex:1" autocomplete="current-password"><button class="g" data-a="unlock">Unlock</button></div></div>`:'<div class="row" style="justify-content:center"><button class="lnk" data-a="showkey">Admin</button></div>');return}
  const names=(S.known||[]).map(n=>`<div class="row" style="margin-top:2px"><span style="flex:1">${esc(n)} ${S.players[n]?`<small>${S.players[n].chips} chips</small>`:''}</span><button data-a="forget" data-v="${esc(n)}" ${arm=='f:'+n?'class="r">Delete?':'>✕'}</button></div>`).join('');

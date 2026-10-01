@@ -148,13 +148,20 @@ await Y.p.waitForTimeout(300);
 ok(!Y.last().s.known.includes('Hana'), 'admin can delete a saved name');
 
 // reset: everything goes
+const R = await player('Rae'); await R.p.waitForSelector('button:text-is("Sit Down")');
+await R.p.click('text=Peek').catch(() => {});
 await Y.p.click('text=Reset table'); await Y.p.click('text=Tap again to erase everything');
+await R.p.waitForSelector('#nm');
+ok(!(await R.p.$('button[data-a=pick]')) && !(await R.p.evaluate(() => localStorage.getItem('pn_token'))), 'reset starts every other phone over too');
 await Y.p.waitForSelector('#nm');
 const s = Y.last().s;
 ok(!s.known.length && !Object.keys(s.players).length && !s.hostName, 'reset clears players, chips, names and host');
 await Y.p.fill('#nm', 'Pat'); await Y.p.click('text=Join');
 await Y.p.waitForSelector('text=+ Bot');
 ok(true, 'after a reset the first person in is host again');
+await Y.p.click('button:text-is("Sit Down")'); await Y.p.click('[data-a=ok]');
+await Y.p.waitForSelector('.st.me');
+ok((await Y.p.textContent('.st.me')).includes('👑') && (await Y.p.textContent('#lobby')).includes('👑 Host: Pat'), 'crown marks the host at the table');
 
 ok(!H.errs.length && !P.errs.length && !Y.errs.length, 'no page errors ' + H.errs.concat(P.errs, Y.errs).join('|'));
 await browser.close(); await stop();
