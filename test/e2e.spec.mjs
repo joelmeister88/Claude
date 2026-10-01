@@ -14,6 +14,7 @@ async function start() {
 }
 async function stop() { await new Promise(r => setTimeout(r, 500)); srv.kill(); await new Promise(r => srv.on('exit', r)) }
 await start();
+process.on('exit', () => srv && srv.kill()); // never leave a server running
 const browser = await chromium.launch({executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome'});
 async function player(name, hash = '') {
   const ctx = await browser.newContext({viewport: {width: 390, height: 844}, isMobile: true, hasTouch: true}), p = await ctx.newPage(), errs = [], frames = [];
@@ -80,6 +81,7 @@ async function checkTurn() {
   ok(await P.p.$eval('#main .p', e => e.classList.contains('turn')), 'panel turns red on your turn');
   ok(/^(2\d|30)s$/.test(await P.p.textContent('.clock')), 'turn clock shows ~30s');
   ok(await P.p.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'no sideways scrolling');
+  if (await P.p.$('#rt')) ok(await P.p.getAttribute('#rt', 'step') == String(P.last().s.bb), 'raise box steps by the big blind');
   turnChecked = true;
 }
 await P.p.waitForFunction(() => document.querySelector('[data-a=fold]') || document.querySelector('#main').textContent.includes("You're the dealer"), null, {timeout: 10000});
@@ -92,7 +94,7 @@ ok((await H.p.textContent('#main')).includes('Pat deals next'), 'everyone sees w
 ok((await P.p.textContent('#gt')).includes("Texas Hold'em"), 'game name is shown at the top');
 await P.p.click('text=Change game');
 const games = await P.p.$$eval('[data-a=setgame]', b => b.map(x => [x.textContent, x.disabled]));
-ok(games[0][0].includes("Texas Hold'em") && games[1][0].includes('Screw Your Neighbor') && games[1][1], "game list: Hold'em first, Screw Your Neighbor coming soon");
+ok(games[0][0].includes("Texas Hold'em") && games[1][0].includes('Screw Your Neighbor') && !games[1][1], "game list: Hold'em first, then Screw Your Neighbor");
 await P.p.click('[data-a=setgame][data-v=holdem]');
 await P.p.waitForSelector('#dbb');
 await P.p.fill('#dbb', '37'); await P.p.click('#sbl');

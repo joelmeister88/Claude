@@ -22,6 +22,13 @@ If `HOST_KEY` isn't set, the server makes one up, saves it with the table and pr
 - **Dealer**: whoever has the button (the gold **D**). Between hands the dealer picks the blinds and taps **Deal**. If they don't deal within 30s (after the 10s pause), the deal passes to the player on their left. Bots deal on their own, as long as a person is seated.
 - **Admin**: anyone with the `HOST_KEY` password. Can **Become host**, delete saved names, and **Reset table**, which erases everyone, all chips, the name history and the host.
 
+### Games (dealer's choice)
+
+- **Texas Hold'em**: the dealer picks the big blind (10 or more, in steps of 10; small blind is half). All bets go up in steps of the big blind; all-in can be any amount.
+- **Screw Your Neighbor**: the dealer picks one ante (100 or more, in steps of 100). Everyone pays it once and gets 4 lives. One card each round; keep it or swap with the player on your left, and the dealer goes last and may swap with the deck. Aces are high and can't be taken (show yours, or let a swap reveal it). Everyone tied for lowest loses a life. The same dealer deals the whole game; the deck reshuffles between rounds when it runs low. The last player with lives takes the pot. If the last players all go out together, the pot carries over and players can ante again.
+
+Tap **📖** at the top for the full rules and tips for each game.
+
 New players are asked for their first name and last initial. Returning players tap their name from the saved list, which brings back their chips. Bots aren't saved.
 
 | Env | Default | |

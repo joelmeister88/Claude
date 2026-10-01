@@ -263,9 +263,156 @@ test("dealer's choice: only the dealer changes the game, between hands, to a rea
   assert.deepEqual(v.games.map(g => g.id), ['holdem', 'syn'], "Hold'em is listed first");
   assert.equal(v.gameName, "Texas Hold'em");
   assert.match(t.player('B', {t: 'game', game: 'holdem'}), /Only the dealer/);
-  assert.match(t.player('A', {t: 'game', game: 'syn'}), /isn't available yet/);
   assert.match(t.player('A', {t: 'game', game: 'nope'}), /isn't available yet/);
   assert.equal(t.player('A', {t: 'game', game: 'holdem'}), undefined);
   t.player('A', {t: 'deal'});
   assert.match(t.player('A', {t: 'game', game: 'holdem'}), /between hands/);
+});
+
+test("Hold'em: bets go up in steps of the big blind; all-in can be any amount", () => {
+  const c = clock(), t = createTable(null, {now: c});
+  for (const n of ['A', 'B', 'C']) { t.player(n, {t: 'sit'}); t.host({op: 'seat', name: n}) }
+  t.player('A', {t: 'deal', bb: 30});
+  const H = t.state().hand, first = t.state().seats[H.turn];
+  t.player(first, {t: 'act', a: 'raise', amt: 50});
+  assert.equal(H.cur, 60, 'a raise of less than one blind becomes the smallest legal raise');
+  t.player(t.state().seats[H.turn], {t: 'act', a: 'raise', amt: 140});
+  assert.equal(H.cur, 120, 'rounded down to a multiple of the blind');
+  const n = t.state().seats[H.turn], all = t.state().players[n].chips + H.bet[H.turn];
+  t.player(n, {t: 'act', a: 'raise', amt: 1e9});
+  assert.equal(H.cur, all, 'all-in is whatever they have');
+  assert.ok(all % 30 != 0);
+});
+
+// Screw Your Neighbor: a rigged deck (cards are dealt from the end)
+const synTable = (names, deck, c = clock()) => {
+  const t = createTable(null, {now: c, shuffle: () => deck.slice()});
+  for (const n of names) { t.player(n, {t: 'sit'}); t.host({op: 'seat', name: n}) }
+  t.host({op: 'game'}); t.player(names[0], {t: 'game', game: 'syn'});
+  return t;
+};
+const C = r => '23456789TJQKA'.indexOf(r); // spades
+
+test('Screw Your Neighbor: ante, 4 lives, swaps, lowest loses a life', () => {
+  // seats A0 (dealer) B1 C2: order B, C, then A last. Deal pops: B=5, C=K, A=9
+  const t = synTable(['A', 'B', 'C'], [C('2'), C('3'), C('9'), C('K'), C('5')]);
+  assert.match(t.player('A', {t: 'deal', ante: 150}), /steps of 100/);
+  assert.equal(t.player('A', {t: 'deal', ante: 200}), undefined);
+  const s = t.state(), H = s.hand;
+  assert.equal(H.g, 'syn'); assert.equal(H.pot, 600); assert.equal(s.players.B.chips, 800);
+  assert.deepEqual(H.lives, {0: 4, 1: 4, 2: 4});
+  assert.equal(s.seats[H.turn], 'B', 'left of the dealer goes first');
+  assert.equal(t.view('B').hand.cards[2], null, "can't see others' cards");
+  assert.equal(t.view('B').hand.deckN, 2);
+  t.player('B', {t: 'act', a: 'swap'});        // B(5) <-> C(K)
+  assert.equal(H.cards[1], C('K')); assert.equal(H.cards[2], C('5'));
+  t.player('C', {t: 'act', a: 'keep'});
+  t.player('A', {t: 'act', a: 'swap'});        // dealer takes the top of the deck (3), no strings attached
+  assert.equal(H.cards[0], C('3'));
+  assert.equal(H.stage, 'reveal'); assert.equal(H.lives[0], 3, 'lowest card loses a life');
+  assert.equal(t.view('B').hand.cards[0], C('3'), 'cards are shown at the reveal');
+});
+
+test('Screw Your Neighbor: Aces cannot be taken, ties all lose, deck reshuffles, last one standing wins', () => {
+  const c = clock();
+  // round 1 deal: B=A, C=4, A=4 (pops from the end)
+  const t = synTable(['A', 'B', 'C'], [C('7'), C('4'), C('4'), C('A')], c);
+  t.player('A', {t: 'deal'});
+  const s = t.state(), H = s.hand;
+  t.player('C', {t: 'act', a: 'show'});
+  assert.ok(!H.shown[2], 'only an Ace can be shown');
+  t.player('B', {t: 'act', a: 'show'});
+  assert.ok(t.view('C').hand.cards[1] == C('A'), 'a shown Ace is face up for everyone');
+  t.player('B', {t: 'act', a: 'keep'}); t.player('C', {t: 'act', a: 'keep'}); t.player('A', {t: 'act', a: 'keep'});
+  assert.deepEqual([H.lives[0], H.lives[1], H.lives[2]], [3, 4, 3], 'tied lowest: both lose a life');
+  // next round needs 4 cards (3 + 1 spare), deck has 0 left: reshuffle
+  c.t += 5000; t.tick();
+  assert.equal(H.round, 2); assert.match(H.msg, /reshuffled/);
+  // play out: whoever holds the lowest keeps losing until one is left
+  for (let g = 0; g < 200 && !H.done; g++) {
+    if (H.stage == 'reveal') { c.t += 5000; t.tick(); continue }
+    t.player(s.seats[H.turn], {t: 'act', a: 'keep'});
+  }
+  assert.equal(H.done, 1);
+  const winner = s.seats[H.ps.find(i => H.lives[i] > 0)];
+  assert.equal(s.players[winner].chips, 900 + 300, 'winner takes the pot');
+  assert.equal(Object.values(s.players).reduce((a, p) => a + p.chips, 0), 3000, 'no chips created or lost');
+});
+
+test('Screw Your Neighbor: swapping into a hidden Ace fails and reveals it', () => {
+  const t = synTable(['A', 'B', 'C'], [C('2'), C('3'), C('9'), C('A'), C('5')]); // B=5, C=A, A=9
+  t.player('A', {t: 'deal'});
+  const H = t.state().hand;
+  t.player('B', {t: 'act', a: 'swap'});
+  assert.equal(H.cards[1], C('5')); assert.equal(H.cards[2], C('A')); assert.ok(H.shown[2]);
+  assert.match(H.msg, /has an Ace/);
+  assert.equal(t.state().seats[H.turn], 'C', 'the turn moves on');
+});
+
+test('Screw Your Neighbor: standing up forfeits; timeouts keep', () => {
+  const c = clock(), t = synTable(['A', 'B', 'C'], [C('2'), C('3'), C('9'), C('K'), C('5')], c);
+  t.player('A', {t: 'deal'});
+  const s = t.state(), H = s.hand;
+  c.t += 30000; t.tick();
+  assert.equal(H.cards[1], C('5')); assert.equal(s.seats[H.turn], 'C', 'out of time: keep');
+  t.player('C', {t: 'stand'});
+  assert.equal(H.lives[2], 0); assert.equal(s.seats[H.turn], 'A');
+  t.player('B', {t: 'stand'});
+  assert.equal(H.done, 1, 'one player left wins');
+  assert.equal(s.players.A.chips, 900 + 300);
+  assert.ok(!s.seats.includes('B') && !s.seats.includes('C'), 'they leave their seats when the game ends');
+});
+
+test('Screw Your Neighbor: bots play many games without creating or losing chips', () => {
+  let games = 0;
+  for (let table = 1; table <= 20; table++) {
+    const c = clock(); let seed = table * 104729; const random = () => (seed = seed * 16807 % 2147483647) / 2147483647;
+    const t = createTable(null, {now: c, random, shuffle: () => { const d = [...Array(52).keys()]; for (let i = 51; i > 0; i--) { const j = random() * (i + 1) | 0; [d[i], d[j]] = [d[j], d[i]] } return d }});
+    for (let i = 0; i < 2 + table % 9; i++) t.host({op: 'bot'});
+    t.state().game = 'syn';
+    const total = () => Object.values(t.state().players).reduce((a, p) => a + p.chips, 0) + (t.state().hand && !t.state().hand.done ? t.state().hand.pot : 0) + (t.state().carry || 0);
+    const start = total();
+    for (let k = 0; k < 5 && !t.host({op: 'start'}); k++) {
+      games++;
+      for (let g = 0; g < 5000 && !t.state().hand.done; g++) { c.t += 1500; t.tick(); assert.equal(total(), start) }
+      assert.equal(t.state().hand.done, 1, 'game finished');
+      c.t += 10000; t.tick();
+    }
+    assert.equal(total(), start);
+  }
+  assert.ok(games > 40, 'played ' + games + ' games');
+});
+
+test('Screw Your Neighbor: if everyone goes out together, the pot carries over and players can ante again', () => {
+  const c = clock(), t = synTable(['A', 'B', 'C'], [C('7'), C('9'), C('9'), C('9')], c);
+  t.player('A', {t: 'deal'});
+  const s = t.state(), H = s.hand;
+  H.lives = {0: 1, 1: 1, 2: 1}; // last lives all round
+  for (const n of ['B', 'C', 'A']) t.player(n, {t: 'act', a: 'keep'});
+  assert.equal(H.done, 1); assert.match(H.msg, /Everyone is out! The pot of 300 carries over/);
+  assert.equal(t.view('').carry, 300);
+  assert.deepEqual(t.view('').again.who, ['A', 'B', 'C']);
+  assert.equal(t.host({op: 'start'}), 'Waiting for players to ante again', 'no normal deal meanwhile');
+  assert.ok(!t.state().hand || t.state().hand.done);
+  t.player('A', {t: 'again', yes: true}); t.player('C', {t: 'again', yes: true}); t.player('B', {t: 'again', yes: false});
+  const H2 = t.state().hand;
+  assert.notEqual(H2, H); assert.equal(H2.g, 'syn'); assert.equal(H2.btn, 0, 'same dealer');
+  assert.deepEqual(H2.ps.map(i => s.seats[i]), ['C', 'A']);
+  assert.equal(H2.pot, 300 + 200, 'carried pot plus the new antes');
+  assert.deepEqual(Object.values(H2.lives), [4, 4]);
+  assert.equal(t.view('').carry, 0);
+});
+
+test('Screw Your Neighbor: nobody antes again in time, so the pot waits for the next game', () => {
+  const c = clock(), t = synTable(['A', 'B'], [C('7'), C('9'), C('9')], c);
+  t.player('A', {t: 'deal'});
+  const s = t.state(); s.hand.lives = {0: 1, 1: 1};
+  t.player('B', {t: 'act', a: 'keep'}); t.player('A', {t: 'act', a: 'keep'});
+  t.player('A', {t: 'again', yes: true});
+  c.t += 30000; t.tick();
+  assert.equal(t.view('').again, null); assert.equal(t.view('').carry, 200);
+  assert.match(s.hand.msg, /waits for the next/);
+  c.t += 10000; t.tick();
+  t.player(s.seats[s.dealer], {t: 'deal'});
+  assert.equal(s.hand.pot, 400, 'carried into the next game');
 });
