@@ -643,3 +643,16 @@ test("someone asking for a seat mid-game doesn't pause it; they join the next ga
   H.pot = 0; t.host({op: 'cancel'});
   assert.equal(t.view('').hold, 'seats', 'between games, a seat request pauses the clocks again');
 });
+
+test('switching to a different name frees the old one, unless it is mid-game', () => {
+  const t = createTable(null, {now: clock()});
+  for (const n of ['A', 'B', 'C']) { t.player(n, {t: 'sit'}); t.host({op: 'seat', name: n}) }
+  const s = t.state();
+  t.player('A', {t: 'deal'});
+  assert.match(t.release(s.seats[s.hand.turn]), /Finish it/);
+  for (let g = 0; g < 50 && !s.hand.done; g++) t.player(s.seats[s.hand.turn], {t: 'act', a: 'fold'});
+  t.release('B');
+  assert.ok(!s.seats.includes('B'), 'stood up'); assert.ok(s.players.B.chips > 0, 'chips stay with the name');
+  t.player('Q', {t: 'sit'}); t.release('Q');
+  assert.ok(!s.pend.Q, 'a seat request is dropped');
+});

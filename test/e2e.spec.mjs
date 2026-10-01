@@ -50,6 +50,11 @@ await H.p.click('[data-a=ok]');
 await H.p.waitForFunction(() => !document.querySelector('#host .p').classList.contains('turn'));
 await P.p.waitForSelector('button:text-is("Stand Up")');
 ok(true, 'host approves a seat');
+// picked the wrong name? change it, even while seated
+await P.p.click('[data-a=rename]');
+ok((await P.p.textContent('#main')).includes('Switching names stands Pat up'), 'changing your name while seated explains what happens');
+await P.p.click('[data-a=unrename]'); await P.p.waitForSelector('button:text-is("Stand Up")');
+ok(true, 'and you can cancel');
 
 // can't take a connected player's name; can't use host actions without being host
 const X = await player('');

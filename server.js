@@ -122,6 +122,8 @@ wss.on('connection', (ws, req) => {
       if (p && p.bot) return err('That name is taken');
       // a name is locked while another device using it is connected; otherwise a returning player can reclaim it
       for (const o of clients) if (o !== c && o.name == n && o.token != c.token) return err(n + ' is already playing');
+      // switching away from a name (picked the wrong one?): that name leaves its seat, if it's free to
+      if (c.name && c.name != n) { const e = table.release(c.name); if (e) return err(e) }
       if (!c.token) c.token = crypto.randomBytes(18).toString('base64url');
       auth[c.token] = n; c.name = n; claimHost(c); persist();
       send(c, {t: 'token', token: c.token}); table.remember(n); return broadcast();

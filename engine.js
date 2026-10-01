@@ -480,6 +480,12 @@ function createTable(saved, {now = Date.now, random = Math.random, shuffle = cry
   }
   /** Add a person's name to the history. */
   function remember(n) { delete S.forgot[n]; if (!S.known[n] || S.known[n] < now() - 60000) { S.known[n] = now(); changed() } }
+  /** Someone switches to a different name: the old one stands up (and drops any seat request or place in line). */
+  function release(n) {
+    if (!S.players[n]) return;
+    if (inLiveHand(n)) return "You're in a game as " + n + '. Finish it (or Stand Up) before changing your name.';
+    if (S.seats.includes(n)) stand(n); delete S.pend[n]; S.queue = S.queue.filter(x => x != n); changed();
+  }
   /** Delete a name from the history, with its saved chips. Returns an error message, or undefined. */
   // default names go after everyone who has actually played (they sort as 'never seen')
   function seedNames() { for (const n of DEFAULT_NAMES) if (!(n in S.known) && !S.forgot[n]) S.known[n] = 0 }
@@ -513,7 +519,7 @@ function createTable(saved, {now = Date.now, random = Math.random, shuffle = cry
       queue: S.queue, paused: S.frozenAt || 0, carry: S.carry || 0, again: S.again, hold: holdReason(),
       canUndo: !!S.snap, known: Object.keys(S.known).sort((a, b) => S.known[b] - S.known[a])};
   }
-  return {state: () => S, view, player, host, tick, remember, forget, reset};
+  return {state: () => S, view, player, host, tick, remember, forget, reset, release};
 }
 
 module.exports = {createTable, best, s5, category, WAIT, BUST, TURN, SEATS};

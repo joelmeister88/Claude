@@ -99,7 +99,7 @@ function render(){const m=$('#main');
  if(!S){put(m,'<div class="p">Connecting to the table…</div>');return}
  $('#gt').textContent='🃏 '+S.gameName;
  if(!me||renaming){const on=S.online||[],k=S.known.map(n=>on.includes(n)&&n!==me?`<button disabled>${esc(n)} <small>(here)</small></button>`:`<button data-a="pick" data-v="${esc(n)}">${esc(n)}${S.players[n]?` <small>· ${S.players[n].chips}</small>`:''}</button>`).join('');
-  put(m,`<div class="p">${k?`<b>Who are you?</b><div class="names">${k}</div><h4>New here?</h4>`:'<b>Your name</b>'}<small>First name and last initial, like “Joel L”</small><div class="row"><input id="nm" maxlength="12" placeholder="First name + initial" style="flex:1" autocomplete="nickname"><button class="g" data-a="name">Join</button>${renaming?'<button data-a="unrename">Cancel</button>':''}</div></div>`);
+  put(m,`<div class="p">${k?`<b>Who are you?</b><div class="names">${k}</div><h4>New here?</h4>`:'<b>Your name</b>'}<small>First name and last initial, like “Joel L”</small><div class="row"><input id="nm" maxlength="12" placeholder="First name + initial" style="flex:1" autocomplete="nickname"><button class="g" data-a="name">Join</button>${renaming?'<button data-a="unrename">Cancel</button>':''}</div>${renaming&&S.seats.includes(me)?'<small>Switching names stands '+esc(me)+' up from the table; chips stay saved under that name.</small>':''}</div>`);
   put($('#lobby'),'');renderHost();renderAdmin();return}
  const H=S.hand,isSyn=H&&H.g=='syn',isBts=H&&H.g=='bts',my=S.seats.indexOf(me),inH=H&&!isSyn&&!isBts&&H.ps.includes(my)&&!H.fold[my],inG=isSyn&&H.ps.includes(my),inB=isBts&&H.ps.includes(my)&&!H.out[my],pl=S.players[me],pot=!H?0:isSyn||isBts?H.pot:Object.values(H.tot).reduce((a,b)=>a+b,0);
  const occ=S.seats.map((n,i)=>n?i:-1).filter(i=>i>=0),N=Math.max(occ.length,1),mr=Math.max(0,occ.indexOf(my));
@@ -116,7 +116,7 @@ function render(){const m=$('#main');
  let me_='';
  if(my<0)me_=`${who} <span class="m">Saved chips: ${pl?pl.chips:0}</span><div class="row">${S.pend[me]?`<small>Seat requested, waiting for host…${H&&!H.done?' You\'ll join the next game.':''}</small> <button data-a="unsit">Cancel</button>`:qi>=0?`<b>You're #${qi+1} in line</b> <small>You'll get the next open seat.</small> <button data-a="unsit">Leave the line</button>`:full?'<button class="g" data-a="seat">Join the waitlist</button> <small>All 12 seats are taken.</small>':'<button class="g" data-a="seat">Sit Down</button>'}</div>`;
  else if(S.bust[me])me_=`<b>${esc(me)}</b> · <b>You're out of chips</b><div class="row"><button class="g" data-a="buy">Get more chips</button><button class="r" data-a="stand">Stand Up</button></div><small>Choose within <span data-cd="${S.bust[me]}"></span> or you'll stand up automatically.</small>`;
- else{me_=`<b>${esc(me)}</b> · ${pl.chips} chips`;
+ else{me_=`${who} · ${pl.chips} chips`;
   if(inG){const al=H.lives[my]>0,mc=H.cards[my],pk=Date.now()<peekT,open=H.shown[my]||H.stage=='reveal';
    me_+=`<div class="lv big">${coins(H.lives[my])}</div>`;
    if(mc!=null)me_+=`<div class="row">${ch(open||pk?mc:null,'lg')}${open?'':pk?'<button data-a="hide">🙈 Hide now</button>':'<button data-a="peek">👁 Peek 3s</button>'}${al&&H.stage=='play'&&mc%13==12&&!H.shown[my]?'<button class="g" data-a="showace">Show my Ace</button>':''}</div>`;
