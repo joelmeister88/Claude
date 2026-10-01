@@ -22,6 +22,6 @@
       seen=now;if(ch.length)next({docChanges:()=>ch,docs:[],size:now.size,empty:!now.size})};subs.add(f);setTimeout(f,10);return()=>subs.delete(f)}})};
   const user={isOwner:async()=>!!opt.owner};
   window.alert=()=>{};window.confirm=()=>false;window.prompt=()=>null;
-  window.__store=store;
+  window.__store=store;window.__db=db;
   window.claude={use:n=>new Promise(r=>setTimeout(()=>r(n=='db'?db:n=='user'?user:null),20))};
 })();

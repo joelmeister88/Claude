@@ -27,7 +27,8 @@ small,.m{opacity:.7}h4{margin:8px 0 2px}
 'use strict';
 const $=s=>document.querySelector(s),SU='♠♥♦♣',RK='  23456789TJQKA',HN=['High card','Pair','Two pair','Trips','Straight','Flush','Full house','Quads','Straight flush'];
 const GAMES={holdem:{name:"Texas Hold'em",hole:2}};
-let db,ref,host=false,S=null,me='',rt=0,peekT=0,snd=true,AC,lastN=-1,addAmt={},busy=0,q=[],adjFor='',leaveArm=0,noteT,saving=0,dirty=0;
+let db,ref,host=false,S=null,me='',rt=0,peekT=0,snd=true,AC,lastN=-1,addAmt={},busy=0,q=[],adjFor='',noteT,saving=0,dirty=0,off=0;
+const WAIT=10000,BUST=30000; // pause after a hand; time a busted player has to choose
 // alert/confirm/prompt are blocked in the artifact iframe, so messages show inline
 function note(t){const e=$('#note');e.textContent=t;e.hidden=!t;clearTimeout(noteT);if(t)noteT=setTimeout(()=>e.hidden=true,4000)}
 // replace markup only when it changed, so a click isn't lost to a node swapped out mid-tap
@@ -36,7 +37,7 @@ try{me=localStorage.getItem('pn_name')||''}catch(e){}
 const cs=c=>RK[2+c%13].replace('T','10')+SU[c/13|0];
 const ch=(c,x='')=>c==null?`<i class="c b ${x}"></i>`:`<i class="c ${[1,2].includes(c/13|0)?'red':''} ${x}">${cs(c)}</i>`;
 const beep=(f,d=.15,t=0)=>{if(!snd)return;try{AC=AC||new AudioContext();const o=AC.createOscillator(),g=AC.createGain();o.frequency.value=f;g.gain.value=.15;o.connect(g);g.connect(AC.destination);o.start(AC.currentTime+t);o.stop(AC.currentTime+t+d)}catch(e){}};
-const fresh=()=>({players:{},seats:Array(12).fill(''),pend:{},leave:{},hand:0,btn:-1,sb:5,bb:10,game:'holdem',n:0,last:-1});
+const fresh=()=>({players:{},seats:Array(12).fill(''),pend:{},leave:{},bust:{},buy:{},wait:0,hand:0,btn:-1,sb:5,bb:10,game:'holdem',n:0,last:-1});
 const LINK='https://claude.ai/artifact/1meboYwVpj812xwNQkQPCe';
 const freeSeat=()=>{for(let k=1;k<=12;k++){const i=((S.last??-1)+k+12)%12;if(!S.seats[i])return i}return -1};
 async function copy(t){try{await navigator.clipboard.writeText(t);return 1}catch(e){const x=document.createElement('textarea');x.value=t;document.body.appendChild(x);x.select();let ok=0;try{ok=document.execCommand('copy')}catch(e){}x.remove();return ok}}
@@ -54,19 +55,31 @@ function post(i,a){const H=S.hand,p=S.players[S.seats[i]];a=Math.max(0,Math.min(
 function startHand(){
  const g=GAMES[S.game];let nb=-1;for(let k=1;k<=12;k++){const i=(S.btn+k+12)%12,n=S.seats[i];if(n&&S.players[n].chips>0){nb=i;break}}
  const ps=[];for(let k=1;k<=12;k++){const i=(nb+k)%12,n=S.seats[i];if(n&&S.players[n].chips>0)ps.push(i)}
+ if(S.hand&&!S.hand.done)return;const o=owed();if(o.length){note('Waiting on '+o.join(', ')+' to get chips or stand up');return}
+ if(Date.now()<S.wait)return;
  if(ps.length<2){note('Need at least 2 seated players with chips');return}
  S.btn=nb;const d=[...Array(52).keys()];for(let i=51;i>0;i--){const j=Math.random()*(i+1)|0;[d[i],d[j]]=[d[j],d[i]]}
  const h={},bet={},tot={};ps.forEach(i=>{h[i]=Array.from({length:g.hole},()=>d.pop());bet[i]=0;tot[i]=0});
  const H=S.hand={ps,btn:nb,d,board:[],h,bet,tot,fold:{},allin:{},acted:{},stage:0,cur:S.bb,minR:S.bb,turn:-1,done:0,show:0,msg:'New hand'};
  const hu=ps.length==2,sb=hu?ps[1]:ps[0],bb=hu?ps[0]:ps[1],first=hu?ps[1]:ps[2];
  post(sb,S.sb);post(bb,S.bb);H.turn=H.allin[first]?nxt(first):first;save()}
-function finish(live){const H=S.hand,n=S.seats[live[0]],pot=Object.values(H.tot).reduce((a,b)=>a+b,0);S.players[n].chips+=pot;H.msg=n+' wins '+pot;H.done=1}
+function stand(n){const i=S.seats.indexOf(n);if(i>=0)S.seats[i]='';delete S.leave[n];delete S.bust[n];delete S.buy[n]}
+// after every hand: start the pause, seat out anyone who stood up mid-hand, and give busted players a choice
+function endHand(){const H=S.hand,now=Date.now();H.done=1;S.wait=now+WAIT;Object.keys(S.leave).forEach(stand);
+ S.seats.forEach(n=>{if(n&&S.players[n].chips<=0){if(S.players[n].bot)stand(n);else if(!S.buy[n])S.bust[n]=now+BUST}})}
+// a player standing up mid-hand folds as soon as the action reaches them
+function autoFold(){const H=S.hand;if(H&&!H.done&&S.leave[S.seats[H.turn]])act(S.seats[H.turn],'fold')}
+// seated players at 0 chips who haven't stood up hold the next deal
+const owed=()=>S.seats.filter(n=>n&&S.players[n].chips<=0);
+function tidy(){S.bust=S.bust||{};S.buy=S.buy||{};S.leave=S.leave||{};
+ for(const n of Object.keys(S.bust).concat(Object.keys(S.buy)))if(!S.seats.includes(n)||S.players[n].chips>0){delete S.bust[n];delete S.buy[n]}}
+function finish(live){const H=S.hand,n=S.seats[live[0]],pot=Object.values(H.tot).reduce((a,b)=>a+b,0);S.players[n].chips+=pot;H.msg=n+' wins '+pot;endHand()}
 function showdown(live){const H=S.hand,sc={};live.forEach(i=>sc[i]=best(H.h[i].concat(H.board)));
  const lv=[...new Set(live.map(i=>H.tot[i]))].sort((a,b)=>a-b),win={};let pv=0;
  lv.forEach(L=>{let pot=0;H.ps.forEach(i=>pot+=Math.min(H.tot[i],L)-Math.min(H.tot[i],pv));pv=L;
   const el=live.filter(i=>H.tot[i]>=L),mx=Math.max(...el.map(i=>sc[i])),w=el.filter(i=>sc[i]==mx),sh=Math.floor(pot/w.length);
   w.forEach((i,k)=>{const n=S.seats[i],g=sh+(k?0:pot-sh*w.length);S.players[n].chips+=g;win[n]=(win[n]||0)+g})});
- H.msg=Object.keys(win).map(n=>n+' wins '+win[n]+' ('+HN[Math.floor(sc[S.seats.indexOf(n)]/15**5)]+')').join(', ');H.show=1;H.done=1}
+ H.msg=Object.keys(win).map(n=>n+' wins '+win[n]+' ('+HN[Math.floor(sc[S.seats.indexOf(n)]/15**5)]+')').join(', ');H.show=1;endHand()}
 function adv(){const H=S.hand,live=H.ps.filter(i=>!H.fold[i]);if(live.length==1)return finish(live);
  const can=live.filter(i=>!H.allin[i]);
  if(!can.every(i=>H.acted[i]&&H.bet[i]==H.cur)){H.turn=nxt(H.turn);return}
@@ -78,15 +91,25 @@ function act(n,a,amt){const H=S.hand;if(!H||H.done)return;const t=H.turn;if(S.se
  else{let to=a=='raise'?Math.floor(+amt)||0:0;const mx=b+p.chips;to=Math.min(to,mx);
   if(a!='raise'||to<=H.cur){post(t,need);H.msg=n+(need>0?' calls '+Math.min(need,b+p.chips):' checks')}
   else{if(to<H.cur+H.minR&&to<mx)to=Math.min(H.cur+H.minR,mx);if(to-H.cur>=H.minR)H.minR=to-H.cur;H.cur=to;H.acted={};post(t,to-b);H.msg=n+(H.allin[t]?' is all-in ':' raises to ')+to}}
- H.acted[t]=1;adv()}
+ H.acted[t]=1;adv();autoFold()}
 async function handle(r){const n=r.name,t=r.type;if(!n)return;
  if(t=='sit'&&!S.seats.includes(n)){S.players[n]=S.players[n]||{chips:0};S.pend[n]=1}
- else if(t=='leave'&&S.seats.includes(n))S.leave[n]=1;else if(t=='act')act(n,r.a,r.amt)}
+ else if((t=='stand'||t=='leave')&&S.seats.includes(n)){const H=S.hand,i=S.seats.indexOf(n);
+  if(H&&!H.done&&H.ps.includes(i)&&!H.fold[i]){S.leave[n]=1;autoFold()}else stand(n)}
+ else if(t=='unsit')delete S.pend[n];
+ else if(t=='buy'&&S.seats.includes(n)){delete S.bust[n];S.buy[n]=1}
+ else if(t=='act')act(n,r.a,r.amt)}
 async function drain(){if(busy)return;busy=1;while(q.length){const d=q.shift();try{await handle(d.data());await db.doc('req/'+d.id).delete()}catch(e){}}busy=0;save()}
-async function save(){S.n=(S.n||0)+1;try{render()}catch(e){console.error(e)}botTick();dirty=1;if(saving)return;saving=1;
+async function save(){S.n=(S.n||0)+1;S.at=Date.now();tidy();try{render()}catch(e){console.error(e)}botTick();dirty=1;if(saving)return;saving=1;
  while(dirty){dirty=0;try{await ref.set(S)}catch(e){console.error(e);note('Could not save the table: '+(e.code||e.message||e))}}saving=0}
 const send=o=>db.doc('req/'+Date.now().toString(36)+Math.random().toString(36).slice(2,6)).set({name:me,t:Date.now(),...o}).catch(e=>note('Could not send: you may need Contributor access'));
 // ---------- UI ----------
+const left=t=>Math.max(0,Math.ceil((t+off-Date.now())/1000));
+// live countdowns update text in place (no re-render), so buttons aren't swapped out under a tap
+function tick(){document.querySelectorAll('[data-cd]').forEach(e=>{const s=left(+e.dataset.cd),t=s?s+'s':'';if(e.textContent!==t)e.textContent=t});
+ const d=$('[data-a=start][data-until]');if(d){const s=left(+d.dataset.until);d.disabled=s>0;const t=s?'Deal in '+s+'s':'Deal next hand';if(d.textContent!==t)d.textContent=t}
+ if(host&&S){let ch=0;for(const n in S.bust)if(Date.now()>=S.bust[n]){stand(n);ch=1}if(ch)save()}}
+setInterval(tick,250);
 function render(){const m=$('#main');
  if(!db){put(m,'<div class="p">This table needs the shared-state feature, which is unavailable in this view. Make sure you are signed in via the invite link.</div>');return}
  if(!me){put(m,'<div class="p"><b>Your name</b><div class="row"><input id="nm" maxlength="12" placeholder="Name" style="width:150px"><button class="g" data-a="name">Join</button></div></div>');return renderHost()}
@@ -99,7 +122,8 @@ function render(){const m=$('#main');
   seats+=`<div class="st ${H&&!H.done&&H.turn==i?'t':''} ${fo?'f':''} ${i==my?'me':''}" style="left:${x}%;top:${y}%">${H&&H.btn==i?'<span class="d">D</span> ':''}<b>${n}</b><br>${S.players[n].chips}<br>${cards}${ih&&H.bet[i]?`<br><i class="ch"></i>${H.bet[i]}`:''}</div>`}
  const board=H?[0,1,2,3,4].map(k=>H.board[k]!=null?ch(H.board[k]):'<i class="c e"></i>').join(''):'';
  let me_='';
- if(my<0)me_=`<b>${me}</b> <span class="m">Saved chips: ${pl?pl.chips:0}</span><div class="row">${S.pend[me]?'<small>Seat requested, waiting for host…</small>':'<button class="g" data-a="seat">Request a seat</button>'}</div>`;
+ if(my<0)me_=`<b>${me}</b> <span class="m">Saved chips: ${pl?pl.chips:0}</span><div class="row">${S.pend[me]?'<small>Seat requested, waiting for host…</small> <button data-a="unsit">Cancel</button>':'<button class="g" data-a="seat">Sit Down</button>'}</div>`;
+ else if(S.bust[me])me_=`<b>${me}</b> · <b>You're out of chips</b><div class="row"><button class="g" data-a="buy">Get more chips</button><button class="r" data-a="stand">Stand Up</button></div><small>Choose within <span data-cd="${S.bust[me]}"></span> or you'll stand up automatically.</small>`;
  else{me_=`<b>${me}</b> · ${pl.chips} chips`;
   if(inH){const pk=Date.now()<peekT;me_+=`<div class="row">${H.h[my].map(c=>ch(pk?c:null,'lg')).join('')}<button data-a="peek">👁 Peek 3s</button></div>`;
    if(!H.done&&H.turn==my){const need=H.cur-H.bet[my],mn=Math.min(H.cur+H.minR,H.bet[my]+pl.chips);if(!rt||rt<mn||rt>H.bet[my]+pl.chips)rt=mn;
@@ -107,37 +131,41 @@ function render(){const m=$('#main');
     if(pl.chips>need)me_+=`<div class="row"><input id="rt" type="number" inputmode="numeric" value="${rt}"><button class="g" data-a="raise">${H.cur?'Raise to':'Bet'}</button><button data-a="q" data-v="${mn}">Min</button><button data-a="q" data-v="${H.cur+Math.floor(pot/2)}">½ Pot</button><button data-a="q" data-v="${H.cur+pot}">Pot</button></div>`}
    else if(!H.done)me_+=`<div class="m">Waiting for ${S.seats[H.turn]}…</div>`}
   else if(H&&!H.done)me_+=`<div class="m">You're sitting out this hand.</div>`;
-  me_+=`<div class="row">${S.leave[me]?'<small>Leave requested…</small>':leaveArm?'<button class="r" data-a="leave">Tap again to ask the host to cash you out</button><button data-a="leavex">Cancel</button>':'<button data-a="leave">Request to leave</button>'}</div>`}
+  me_+=`<div class="row">${S.leave[me]?'<small>Standing up when this hand ends…</small>':`<button class="r" data-a="stand">Stand Up</button>`}${S.buy[me]?'<small>Chip request sent, waiting for host…</small>':'<button data-a="buy">Get more chips</button>'}</div>`;
+  if(inH&&!H.done&&!S.leave[me])me_+='<small>Standing up mid-hand folds your cards.</small>'}
  put(m,`<div class="tbl" style="aspect-ratio:${N<=3?'1/1':N<=7?'6/7':'4/5'}">${seats}<div class="mid"><div>${board}</div><div style="margin:4px 0"><i class="ch"></i><b>Pot ${pot}</b></div><div style="font-size:12px">${H?H.msg:'Waiting for host to deal'}</div></div></div><div class="p">${me_}</div>`);
  if(H&&!H.done&&H.turn==my&&lastN!=S.n){rt=0;beep(660,.12);beep(880,.2,.15);navigator.vibrate&&navigator.vibrate(200)}
  if(H&&H.done&&lastN!=S.n){[523,659,784].forEach((f,i)=>beep(f,.15,i*.12))}
- lastN=S.n;renderHost()}
+ lastN=S.n;renderHost();tick()}
 function renderHost(){const e=$('#host'),f=document.activeElement;if(!host||!S||(f&&f.tagName=='INPUT'&&e.contains(f)))return;const H=S.hand;
  const pend=Object.keys(S.pend).map(n=>{const v=addAmt[n]??(S.players[n].chips>0?0:1000);return`<div class="row"><b>${n}</b><span class="m">saved ${S.players[n].chips}</span> +<input data-add="${n}" type="number" value="${v}"><button class="g" data-a="ok" data-v="${n}">Seat</button><button data-a="no" data-v="${n}">✕</button></div>`}).join('');
- const lv=Object.keys(S.leave).map(n=>`<div class="row"><b>${n}</b> wants to leave (${S.players[n].chips} chips) <button class="g" data-a="lok" data-v="${n}">Approve</button><button data-a="lno" data-v="${n}">✕</button></div>`).join('');
+ const buy=Object.keys(S.buy).map(n=>{const v=addAmt[n]??1000;return`<div class="row"><b>${n}</b><span class="m">has ${S.players[n].chips}</span> +<input data-add="${n}" type="number" value="${v}"><button class="g" data-a="give" data-v="${n}">Give</button><button data-a="nobuy" data-v="${n}">✕</button></div>`}).join('');
+ const bust=Object.keys(S.bust).map(n=>`<div class="row"><b>${n}</b> is out of chips, deciding… <span data-cd="${S.bust[n]}"></span></div>`).join('');
+ const o=owed(),live=H&&!H.done,dl=live?'disabled>Hand in progress':o.length?'disabled>Waiting on '+o.join(', '):`data-until="${S.wait||0}">Deal next hand`;
  const led=Object.keys(S.players).map(n=>`<div class="row"><span style="flex:1">${n} ${S.seats.includes(n)?'':'<small>(away)</small>'}</span><b>${S.players[n].chips}</b>${adjFor==n?`<input data-adjin="${n}" type="number" placeholder="±" style="width:80px"><button class="g" data-a="adjok" data-v="${n}">OK</button>`:`<button data-a="adj" data-v="${n}">±</button>`}${S.players[n].bot?`<button data-a="rmbot" data-v="${n}">✕</button>`:''}</div>`).join('');
- put(e,`<div class="p"><b>Host controls</b> <small>${GAMES[S.game].name}</small><div class="row"><button class="g" data-a="start" ${H&&!H.done?'disabled':''}>${H&&!H.done?'Hand in progress':'Deal next hand'}</button><button data-a="bot">+ Bot</button>Blinds <input data-bl="sb" type="number" value="${S.sb}" style="width:60px"> / <input data-bl="bb" type="number" value="${S.bb}" style="width:60px"></div>
- ${pend?'<h4>Seat requests</h4>'+pend:''}${lv?'<h4>Leave requests</h4>'+lv:''}<h4>Chip ledger</h4>${led||'<small>No players yet</small>'}</div>`)}
+ put(e,`<div class="p"><b>Host controls</b> <small>${GAMES[S.game].name}</small><div class="row"><button class="g" data-a="start" ${dl}</button><button data-a="bot">+ Bot</button>Blinds <input data-bl="sb" type="number" value="${S.sb}" style="width:60px"> / <input data-bl="bb" type="number" value="${S.bb}" style="width:60px"></div>
+ ${pend?'<h4>Seat requests</h4>'+pend:''}${buy?'<h4>Chip requests</h4>'+buy:''}${bust?'<h4>Out of chips</h4>'+bust:''}<h4>Chip ledger</h4>${led||'<small>No players yet</small>'}</div>`);tick()}
 document.addEventListener('click',async e=>{const b=e.target.closest('[data-a]');if(!b)return;const a=b.dataset.a,v=b.dataset.v;
  try{AC=AC||new AudioContext();AC.resume()}catch(x){}
  if(a=='name'){const n=$('#nm').value.trim().replace(/[.\/\\]/g,'').slice(0,12);if(!n)return;me=n;try{localStorage.setItem('pn_name',n)}catch(x){}render()}
  else if(a=='share'){const ok=await copy('Join my poker table 🃏 '+LINK);b.textContent=ok?'✓ Copied':'Copy failed';if(!ok)note('Copy this link: '+LINK);setTimeout(()=>b.textContent='🔗 Share',1500)}
  else if(a=='snd'){snd=!snd;b.textContent=snd?'🔊':'🔈'}
  else if(a=='seat'){if(S.seats.includes(me)||S.pend[me])return;send({type:'sit'})}
+ else if(a=='unsit')send({type:'unsit'});
+ else if(a=='stand')send({type:'stand'});
+ else if(a=='buy')send({type:'buy'});
  else if(a=='fold'||a=='call')send({type:'act',a});
  else if(a=='raise')send({type:'act',a:'raise',amt:rt});
  else if(a=='allin')send({type:'act',a:'raise',amt:1e9});
  else if(a=='q'){rt=+v;render()}
  else if(a=='peek'){peekT=Date.now()+3000;render();setTimeout(render,3050)}
- else if(a=='leave'){if(leaveArm){leaveArm=0;send({type:'leave'})}else leaveArm=1;render()}
- else if(a=='leavex'){leaveArm=0;render()}
  else if(!host)return;
  else if(a=='start')startHand();
  else if(a=='ok'){const p=S.players[v],add=+addAmt[v]||(p.chips>0?0:1000),s=freeSeat();
   if(s<0)return note('Table is full');if(p.chips+add<=0)return note('Give them some chips first');p.chips+=add;S.seats[s]=v;S.last=s;delete S.pend[v];delete addAmt[v];save()}
  else if(a=='no'){delete S.pend[v];save()}
- else if(a=='lok'){if(S.hand&&!S.hand.done&&S.hand.ps.includes(S.seats.indexOf(v))&&!S.hand.fold[S.seats.indexOf(v)])return note('Wait until this hand ends');S.seats[S.seats.indexOf(v)]='';delete S.leave[v];save()}
- else if(a=='lno'){delete S.leave[v];save()}
+ else if(a=='give'){const add=Math.floor(+(addAmt[v]??1000))||0;if(add<=0)return note('Enter a chip amount');S.players[v].chips+=add;delete S.buy[v];delete addAmt[v];save()}
+ else if(a=='nobuy'){delete S.buy[v];if(S.players[v].chips<=0&&!(S.hand&&!S.hand.done&&S.hand.ps.includes(S.seats.indexOf(v))))stand(v);save()}
  else if(a=='bot'){const s=freeSeat();if(s<0)return note('Table is full');let k=1;while(S.players['Bot '+k])k++;const n='Bot '+k;S.players[n]={chips:1000,bot:1};S.seats[s]=n;S.last=s;save()}
  else if(a=='rmbot'){const H=S.hand;if(H&&!H.done)return note('Wait until this hand ends');const i=S.seats.indexOf(v);if(i>=0)S.seats[i]='';delete S.players[v];save()}
  else if(a=='adj'){adjFor=v;render();const i=$('[data-adjin]');i&&i.focus()}
@@ -147,6 +175,6 @@ document.addEventListener('change',e=>{const t=e.target;if(host&&t.dataset.bl){S
 (async()=>{render();try{db=await claude.use('db');const u=await claude.use('user');host=u?!!(await u.isOwner()):false}catch(e){}
  if(!db)return render();ref=db.doc('game/state');
  ref.onSnapshot(s=>{if(host&&S)return;if(host&&!s.exists&&s.metadata&&s.metadata.fromCache)return;
-  S=s.exists?(host?structuredClone(s.data()):s.data()):null;if(host&&!S){S=fresh();save()}else render();botTick()},e=>{console.error(e);note('Lost connection to the table: '+(e.code||e.message))});
+  S=s.exists?{leave:{},bust:{},buy:{},wait:0,...(host?structuredClone(s.data()):s.data())}:null;off=S&&!host&&S.at?Date.now()-S.at:0;if(host&&!S){S=fresh();save()}else render();botTick()},e=>{console.error(e);note('Lost connection to the table: '+(e.code||e.message))});
  db.collection('req').onSnapshot(s=>{if(!host)return;s.docChanges().forEach(c=>{if(c.type=='added')q.push(c.doc)});drain()});render()})();
 </script></body></html>
