@@ -600,3 +600,25 @@ test('Between the Sheets: bots play many games without creating or losing chips'
   }
   assert.ok(games >= 10, 'played ' + games);
 });
+
+test('the host can cancel a game, or undo the last one: chips go back to how they were', () => {
+  const c = clock();
+  const t = btsTable(['A', 'B', 'C'], [C('2'), C('2'), C('2'), C('9'), C('K'), C('4')], c);
+  t.player('A', {t: 'deal', ante: 300});
+  const s = t.state(), H = s.hand;
+  t.player('B', {t: 'act', a: 'bet', amt: 500});            // 4..K, 9 lands: B wins 500
+  t.host({op: 'give', name: 'C', add: 250});               // host gives C chips mid-game: kept
+  assert.equal(t.view('').canUndo, true);
+  t.host({op: 'cancel'});
+  assert.equal(H.done, 1); assert.match(H.msg, /cancelled the game/);
+  assert.deepEqual([s.players.A.chips, s.players.B.chips, s.players.C.chips], [1000, 1000, 1250]);
+  assert.equal(t.view('').canUndo, false); assert.match(t.host({op: 'cancel'}), /No game/);
+  assert.equal(s.seats[s.dealer], 'A', 'the same dealer deals again');
+  // a finished Hold'em hand can be undone too, until the next one starts
+  t.player('A', {t: 'game', game: 'holdem'}); c.t += 10000; t.player('A', {t: 'deal'});
+  for (let g = 0; g < 50 && !s.hand.done; g++) t.player(s.seats[s.hand.turn], {t: 'act', a: 'fold'});
+  assert.notDeepEqual([s.players.A.chips, s.players.B.chips, s.players.C.chips], [1000, 1000, 1250]);
+  t.host({op: 'cancel'});
+  assert.match(s.hand.msg, /undid the last game/);
+  assert.deepEqual([s.players.A.chips, s.players.B.chips, s.players.C.chips], [1000, 1000, 1250]);
+});

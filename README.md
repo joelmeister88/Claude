@@ -8,19 +8,17 @@ The server deals and keeps the deck. Each phone only ever receives its own hole 
 
 ```sh
 npm install
-HOST_KEY=pick-a-secret npm start
+npm start
 ```
 
 - Everyone, including you: `http://localhost:3000/`
-- Admin: `http://localhost:3000/#host=pick-a-secret`, or tap **Admin** at the bottom of the page and enter the password. Either way the device remembers it.
-
-If `HOST_KEY` isn't set, the server makes one up, saves it with the table and prints the admin link at startup.
+- Admin: tap **Admin** at the bottom of the page and enter the password (8520 unless `ADMIN_PASSWORD` is set), or open `http://localhost:3000/#host=8520`. Either way the device remembers it.
 
 ### Who does what
 
-- **Host**: the first person to join the link. Approves seats, gives chips, adds bots, can stand a player up.
-- **Dealer**: whoever has the button (the gold **D**). Between hands the dealer picks the blinds and taps **Deal**. If they don't deal within 2 minutes (after the 10s pause), the deal passes to the player on their left. Bots deal on their own, as long as a person is seated.
-- **Admin**: anyone with the `HOST_KEY` password. Can **Become host**, delete saved names, and **Reset table**, which erases everyone, all chips, the name history and the host.
+- **Host**: the first person to join the link. Approves seats, gives chips, adds bots, can stand a player up, pause the timers, and **Cancel game** (or **Undo last game** until the next one starts), which gives everyone back the chips they had before that game.
+- **Dealer**: whoever has the button (the gold **D**). Between hands the dealer taps **Deal: <current game>** or **🎲 Change game**, then picks the blind or ante and taps **Deal**. If they don't deal within 2 minutes (after the 10s pause), the deal passes to the player on their left. Bots deal on their own, as long as a person is seated.
+- **Admin**: anyone with the admin password. Can **Become host**, delete saved names, and **Reset table**, which erases everyone, all chips, the name history and the host.
 
 ### Games (dealer's choice)
 
@@ -36,14 +34,15 @@ New players are asked for their first name and last initial. Returning players t
 | Env | Default | |
 |---|---|---|
 | `PORT` | `3000` | |
-| `HOST_KEY` | generated | the admin password (5 wrong tries from one address lock it out for 15 minutes) |
+| `ADMIN_PASSWORD` | `8520` | the admin password (5 wrong tries from one address lock it out for 15 minutes) |
+| `HOST_KEY` | generated | an older admin key that still works too |
 | `DATA_FILE` | `data/table.json` | chip ledger, seats and device logins, saved after every change |
 
 ## Deploy
 
 It needs a host that supports WebSockets. One Node process serves the page and the game.
 
-**Render (simplest):** push this repo to GitHub, then in Render choose **New → Blueprint** and pick the repo. `render.yaml` sets everything up and generates `HOST_KEY`. To make it easy to type on a phone, change `HOST_KEY` under the service's **Environment** tab to a password you'll remember.
+**Render (simplest):** push this repo to GitHub, then in Render choose **New → Blueprint** and pick the repo. `render.yaml` sets everything up and generates `HOST_KEY`. The admin password is 8520; to change it, add `ADMIN_PASSWORD` under the service's **Environment** tab.
 On the free plan, the service sleeps when idle (the first visit takes a little while to wake it), and its disk is wiped on restarts and deploys, which resets the chip ledger. To keep chips, attach a persistent disk (paid) and set `DATA_FILE` to a path on it.
 
 **Fly.io / anything that runs Docker:** the `Dockerfile` stores the table at `/data/table.json`, so mount a volume at `/data`. For example, with Fly: `fly launch`, `fly volumes create data --size 1`, add a `[mounts]` section with `source = "data"` and `destination = "/data"`, then `fly secrets set HOST_KEY=...`.

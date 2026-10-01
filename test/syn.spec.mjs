@@ -32,6 +32,7 @@ ok(await P.p.isHidden('#rules'), 'rules close');
 
 // Hana deals first: change the game, pick an ante
 await H.p.waitForSelector("text=You're the dealer");
+ok((await H.p.textContent('[data-a=dealgo]')).includes("Deal: Texas Hold'em"), 'dealer sees Deal: and the current game');
 await H.p.click('text=Change game'); await H.p.click('[data-a=setgame][data-v=syn]');
 await H.p.waitForSelector('#dan');
 ok((await P.p.textContent('#gt')).includes('Screw Your Neighbor'), 'everyone sees the new game at the top');

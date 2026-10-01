@@ -89,7 +89,11 @@ if (await P.p.$('[data-a=fold]')) { await checkTurn(); await P.p.click('[data-a=
 
 // the button moves left to Pat, who deals after the 10s pause with blinds of their choosing
 await P.p.waitForSelector("text=You're the dealer");
+ok((await P.p.textContent('[data-a=dealgo]')).includes("Deal: Texas Hold'em") && await P.p.isVisible('[data-a=pickgame]'), "step 1: 'Deal: Texas Hold'em' next to Change game");
+await P.p.click('[data-a=dealgo]');
+ok((await P.p.textContent('#main')).includes('Choose the blind, then Deal'), 'step 2: choose the blind');
 ok(await P.p.isDisabled('[data-a=deal]') && /Deal in \d+s/.test(await P.p.textContent('[data-a=deal]')), 'dealer waits out the 10s pause');
+await P.p.click('[data-a=dealback]'); await P.p.waitForSelector('[data-a=dealgo]');
 ok((await H.p.textContent('#main')).includes('Pat deals next'), 'everyone sees who deals next');
 ok((await P.p.textContent('#gt')).includes("Texas Hold'em"), 'game name is shown at the top');
 await P.p.click('text=Change game');
@@ -114,11 +118,16 @@ await H.p.click('[data-a=pause]');
 await P.p.waitForSelector('text=Paused by the host', {state: 'detached'});
 ok(true, 'host resumes the timers');
 await P.p.waitForFunction(() => !document.querySelector('[data-a=deal]').disabled, null, {timeout: 12000});
+const before = P.last().s.players.Pat.chips;
 await P.p.click('[data-a=deal]');
 await P.p.waitForFunction(() => document.querySelector('.info')?.textContent.includes('Pot 60'), null, {timeout: 3000}).catch(() => {});
 for (let k = 0; k < 30 && !(P.last().s.hand && !P.last().s.hand.done && P.last().s.sb == 20); k++) await P.p.waitForTimeout(100);
 ok(P.last().s.hand && !P.last().s.hand.done && P.last().s.sb == 20 && P.last().s.hand.cur >= 40, 'dealer deals with their blinds');
 if (!turnChecked) { await P.p.waitForSelector('[data-a=fold]', {timeout: 15000}); await checkTurn() }
+// the host cancels the hand: chips go back to how they were
+await H.p.click('[data-a=cancelgame]'); await H.p.click('text=Tap again to confirm');
+await P.p.waitForFunction(() => document.querySelector('.info').textContent.includes('cancelled the game'));
+ok(P.last().s.players.Pat.chips == before && P.last().s.hand.done, 'host cancels a game: everyone gets their chips back');
 
 // Pat stands up; everyone sees them in "Not at the table"
 await P.p.click('button:text-is("Stand Up")');

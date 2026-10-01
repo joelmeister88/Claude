@@ -1,6 +1,6 @@
 'use strict';
 // Poker Night server: serves the page and runs the one table over WebSockets.
-// Env: PORT (default 3000), HOST_KEY (the admin password), DATA_FILE (where the table is saved).
+// Env: PORT (default 3000), ADMIN_PASSWORD (default 8520), HOST_KEY (an extra, older admin key), DATA_FILE.
 // Roles: the host is the first device to join (approves seats, gives chips); the admin knows HOST_KEY
 // (can take over as host, delete saved names, reset everything); the dealer is whoever holds the button.
 const http = require('http'), fs = require('fs'), path = require('path'), crypto = require('crypto');
@@ -15,6 +15,8 @@ const PAGE = fs.readFileSync(path.join(__dirname, 'public', 'index.html'));
 let saved = {};
 try { saved = JSON.parse(fs.readFileSync(DATA, 'utf8')) } catch (e) { if (e.code != 'ENOENT') console.error('Could not read', DATA, e.message) }
 const HOST_KEY = process.env.HOST_KEY || saved.hostKey || crypto.randomBytes(9).toString('base64url');
+// the admin password; the older HOST_KEY (the #host= link) keeps working too
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || '8520';
 const auth = saved.auth || {}; // device token -> player name
 let hostToken = saved.hostToken || ''; // the host's device
 let saveT;
@@ -68,7 +70,8 @@ function tryKey(c, k) {
   if (++t.n >= 5) { t.n = 0; t.until = Date.now() + LOCK }
   tries.set(c.ip, t); return t.until > Date.now() ? 'locked' : 'wrong';
 }
-const keyOk = k => typeof k == 'string' && k.length == HOST_KEY.length && crypto.timingSafeEqual(Buffer.from(k), Buffer.from(HOST_KEY));
+const same = (a, b) => typeof a == 'string' && a.length == b.length && crypto.timingSafeEqual(Buffer.from(a), Buffer.from(b));
+const keyOk = k => same(k, ADMIN_PASSWORD) || same(k, HOST_KEY);
 // names are shown to everyone: letters, digits, spaces and a little punctuation only
 const cleanName = n => String(n || '').normalize('NFC').replace(/[^\p{L}\p{N} _.'-]/gu, '').replace(/\s+/g, ' ').trim().slice(0, 12);
 const isBotName = n => /^bot \d+$/i.test(n);
@@ -135,5 +138,5 @@ setInterval(() => { for (const c of clients) c.hits = 0 }, 1000);
 
 server.listen(PORT, () => {
   console.log(`Poker Night on http://localhost:${PORT}`);
-  console.log(`Admin link: <your address>/#host=${HOST_KEY}` + (process.env.HOST_KEY ? '' : '  (set HOST_KEY to choose your own)'));
+  console.log(`Admin: tap Admin and enter the password, or open <your address>/#host=<password>`);
 });

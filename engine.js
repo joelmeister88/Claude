@@ -84,6 +84,19 @@ function createTable(saved, {now = Date.now, random = Math.random, shuffle = cry
     for (const n of Object.keys(S.bust).concat(Object.keys(S.buy)))
       if (!S.seats.includes(n) || S.players[n].chips > 0) { delete S.bust[n]; delete S.buy[n] }
   }
+  // ---------- cancel a game: everyone gets back the chips they had when it started ----------
+  const takeSnap = () => ({chips: Object.fromEntries(Object.entries(S.players).map(([n, p]) => [n, p.chips])), carry: S.carry || 0, btn: S.btn, dealer: S.dealer});
+  // chips the host hands out during a game are kept if the game is cancelled
+  function hostChips(n, d) { if (S.snap && n in S.snap.chips) S.snap.chips[n] += d }
+  function cancelGame() {
+    const sn = S.snap, H = S.hand; if (!sn || !H) return 'No game to cancel';
+    for (const n in sn.chips) if (S.players[n]) S.players[n].chips = sn.chips[n];
+    S.carry = sn.carry; S.btn = sn.btn; S.dealer = sn.dealer; S.dealDl = 0; S.again = null; S.snap = null;
+    const was = !H.done; H.done = 1; H.show = 0; H.turn = -1;
+    H.msg = (was ? 'The host cancelled the game' : 'The host undid the last game') + ': everyone has the chips they had before it';
+    Object.keys(S.leave).forEach(stand); S.wait = now();
+  }
+
   // ---------- the dealer (button) deals the next hand and picks the blinds ----------
   const eligible = i => { const n = S.seats[i]; return !!n && S.players[n].chips > 0 && !S.leave[n] };
   function nextEligible(from) { for (let k = 1; k <= SEATS; k++) { const i = (from + k + SEATS) % SEATS; if (eligible(i)) return i } return -1 }
@@ -129,11 +142,12 @@ function createTable(saved, {now = Date.now, random = Math.random, shuffle = cry
     if (now() < S.wait) return 'Next hand can be dealt in a moment';
     const p = Object.keys(S.pend); if (p.length) return 'Waiting for the host to seat ' + p.join(', ');
     const g = GAMES[S.game], nb = S.dealer >= 0 && eligible(S.dealer) ? S.dealer : nextEligible(S.btn);
-    if (S.game == 'syn') return startSyn(nb);
-    if (S.game == 'bts') return startBts(nb);
+    // remember everyone's chips, so the host can cancel this game and give them back
+    const snap = takeSnap();
+    if (S.game == 'syn' || S.game == 'bts') { const e = S.game == 'syn' ? startSyn(nb) : startBts(nb); if (!e) S.snap = snap; return e }
     const ps = []; for (let k = 1; k <= SEATS; k++) { const i = (nb + k) % SEATS, n = S.seats[i]; if (n && S.players[n].chips > 0) ps.push(i) }
     if (ps.length < 2) return 'Need at least 2 seated players with chips';
-    S.btn = S.dealer = nb; S.dealDl = 0; const d = shuffle();
+    S.btn = S.dealer = nb; S.dealDl = 0; S.snap = snap; const d = shuffle();
     const h = {}, bet = {}, tot = {}; ps.forEach(i => { h[i] = Array.from({length: g.hole}, () => d.pop()); bet[i] = 0; tot[i] = 0 });
     const H = S.hand = {g: 'holdem', ps, btn: nb, d, board: [], h, bet, tot, fold: {}, allin: {}, acted: {}, stage: 0, cur: S.bb, minR: S.bb, turn: -1, done: 0, show: 0, msg: 'New hand'};
     const hu = ps.length == 2, sb = hu ? ps[1] : ps[0], bb = hu ? ps[0] : ps[1], first = hu ? ps[1] : ps[2 % ps.length];
@@ -329,7 +343,7 @@ function createTable(saved, {now = Date.now, random = Math.random, shuffle = cry
   }
   function againResolve() {
     const A = S.again, ins = Object.keys(A.yes).filter(n => S.seats.includes(n) && S.players[n].chips >= A.ante); S.again = null;
-    if (ins.length >= 2) { S.ante = A.ante; S.game = 'syn'; startSyn(A.btn, ins); S.hand.msg = 'New game! The pot carried over · ' + S.hand.msg }
+    if (ins.length >= 2) { S.ante = A.ante; S.game = 'syn'; const snap = takeSnap(); startSyn(A.btn, ins); S.snap = snap; S.hand.msg = 'New game! The pot carried over · ' + S.hand.msg }
     else if (S.hand) S.hand.msg = 'Not enough players to go again: the pot of ' + S.carry + ' waits for the next Screw Your Neighbor game';
   }
   // standing up mid-game forfeits: out of the game now, ante stays in the pot, seat frees when the game ends
@@ -390,12 +404,13 @@ function createTable(saved, {now = Date.now, random = Math.random, shuffle = cry
       case 'seat': {
         if (!S.pend[n]) return; const add = m.add == null || m.add === '' ? (p.chips > 0 ? 0 : 1000) : int(m.add), s = freeSeat();
         if (!(add >= 0)) return 'Enter a chip amount'; if (s < 0) return 'Table is full'; if (p.chips + add <= 0) return 'Give them some chips first';
-        p.chips += add; S.seats[s] = n; S.last = s; delete S.pend[n]; break;
+        p.chips += add; hostChips(n, add); S.seats[s] = n; S.last = s; delete S.pend[n]; break;
       }
       case 'noseat': delete S.pend[n]; break;
-      case 'give': { const add = int(m.add); if (!(add > 0)) return 'Enter a chip amount'; p.chips += add; delete S.buy[n]; break }
+      case 'give': { const add = int(m.add); if (!(add > 0)) return 'Enter a chip amount'; p.chips += add; hostChips(n, add); delete S.buy[n]; break }
       case 'nobuy': delete S.buy[n]; if (p.chips <= 0 && !inLiveHand(n) && S.seats.includes(n)) stand(n); break;
-      case 'adj': { const x = int(m.x); if (!x) return; if (inLiveHand(n)) return 'Wait until this hand ends'; p.chips = x < 0 ? Math.max(p.chips + x, Math.min(p.chips, 0)) : p.chips + x; break }
+      case 'adj': { const x = int(m.x); if (!x) return; if (inLiveHand(n)) return 'Wait until this hand ends'; const was = p.chips; p.chips = x < 0 ? Math.max(p.chips + x, Math.min(p.chips, 0)) : p.chips + x; hostChips(n, p.chips - was); break }
+      case 'cancel': { const e = cancelGame(); if (e) return e; break }
       case 'kick': standOrLeave(n); break;
       case 'blinds': { const bb = int(m.bb), e = blindError(bb); if (e) return e; S.sb = bb / 2; S.bb = bb; break }
       case 'pause': S.paused = m.on ? 1 : 0; break;
@@ -489,7 +504,7 @@ function createTable(saved, {now = Date.now, random = Math.random, shuffle = cry
       btn: S.btn, dealer: S.dealer, dealDl: S.dealDl, sb: S.sb, bb: S.bb, ante: S.ante, game: S.game, gameName: GAMES[S.game].name,
       games: Object.entries(GAMES).map(([id, g]) => ({id, name: g.name, blurb: g.blurb, ready: !!g.ready})), n: S.n,
       queue: S.queue, paused: S.frozenAt || 0, carry: S.carry || 0, again: S.again, hold: holdReason(),
-      known: Object.keys(S.known).sort((a, b) => S.known[b] - S.known[a])};
+      canUndo: !!S.snap, known: Object.keys(S.known).sort((a, b) => S.known[b] - S.known[a])};
   }
   return {state: () => S, view, player, host, tick, remember, forget, reset};
 }

@@ -23,6 +23,7 @@ await H.p.click('button:text-is("Sit Down")'); await H.p.click('[data-a=ok][data
 await P.p.click('button:text-is("Sit Down")'); await H.p.click('[data-a=ok][data-v="Pat"]');
 
 await H.p.waitForSelector("text=You're the dealer");
+ok((await H.p.textContent('[data-a=dealgo]')).includes("Deal: Texas Hold'em"), 'dealer sees Deal: and the current game');
 await H.p.click('text=Change game');
 ok((await H.p.textContent('[data-a=setgame][data-v=bts]')).includes('Between the Sheets'), 'Between the Sheets is on the game list');
 await H.p.click('[data-a=setgame][data-v=bts]');

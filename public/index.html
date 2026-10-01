@@ -45,7 +45,7 @@ small,.m{opacity:.7}h4{margin:8px 0 2px}
 <script>
 'use strict';
 const $=s=>document.querySelector(s),SU='♠♥♦♣',RK='  23456789TJQKA';
-let ws,S=null,me='',token='',hostKey='',host=false,admin=false,renaming=false,showKey=false,arm='',dbb=0,dan=0,bta=0,rtMin=0,rtMax=0,rtStep=10,picking=false,lastPend=0,lastDeal=0,off=0,rt=0,peekT=0,snd=true,AC,lastN=-1,addAmt={},adjFor='',noteT,retry=0;
+let ws,S=null,me='',token='',hostKey='',host=false,admin=false,renaming=false,showKey=false,arm='',dealStep=0,dbb=0,dan=0,bta=0,rtMin=0,rtMax=0,rtStep=10,picking=false,lastPend=0,lastDeal=0,off=0,rt=0,peekT=0,snd=true,AC,lastN=-1,addAmt={},adjFor='',noteT,retry=0;
 try{token=localStorage.getItem('pn_token')||'';hostKey=localStorage.getItem('pn_host')||''}catch(e){}
 // the admin link is /#host=KEY: remember the key on this device, then drop it from the address bar
 {const m=location.hash.match(/host=([^&]+)/);if(m){try{hostKey=decodeURIComponent(m[1])}catch(e){hostKey=m[1]}try{localStorage.setItem('pn_host',hostKey)}catch(e){}history.replaceState(null,'',location.pathname)}}
@@ -143,12 +143,14 @@ function render(){const m=$('#main');
    else if(!H.done)me_+=`<div class="m">Waiting for ${esc(S.seats[H.turn])}… <span data-cd="${H.dl||0}"></span></div>`}
   else if(H&&!H.done)me_+=`<div class="m">You're sitting out this hand.</div>`;
   if(A&&A.who.includes(me))me_+=ans?`<div class="m">${ans=='in'?"You're in.":"You're sitting this one out."} Waiting for the others… <span data-cd="${A.until}"></span></div>`:`<div class="row"><b>Everyone's out!</b> <span class="clock" data-cd="${A.until}"></span></div><small>The pot of ${S.carry} carries over. Ante ${A.ante} to play again?</small><div class="row act"><button class="g" data-a="again1">I'm in (${A.ante})</button><button data-a="again0">Sit out</button></div>`;
-  if(myDeal)me_+=`<div class="row"><b>You're the dealer</b> <span class="clock" data-cd="${S.dealDl}"></span></div><div class="row"><button data-a="pickgame">🎲 Change game</button><small>Now: ${esc(S.gameName)}</small></div>${S.game=='syn'||S.game=='bts'?`<div class="row act"><span>Ante</span><button data-a="andn" aria-label="Lower ante">−</button><input id="dan" type="number" inputmode="numeric" min="100" step="100" value="${dan||S.ante}"><button data-a="anup" aria-label="Raise ante">+</button></div><div class="row act"><small style="flex:1">${S.game=='bts'?'One ante each makes the pot.':`One ante to join. Everyone gets 4 lives.${S.carry?` Plus ${S.carry} carried over.`:''}`}</small><button class="g" data-a="deal" data-until="${S.wait||0}">Deal</button></div>`:`<div class="row act"><span>Blind</span><button data-a="bbdn" aria-label="Lower blind">−</button><input id="dbb" type="number" inputmode="numeric" min="10" step="10" value="${dbb||S.bb}"><button data-a="bbup" aria-label="Raise blind">+</button></div><div class="row act"><small id="sbl" style="flex:1">Small blind ${(dbb||S.bb)/2}</small><button class="g" data-a="deal" data-until="${S.wait||0}">Deal</button></div>`}<small>Deal within the time or the deal passes to your left.</small>`;
+  // dealing, step 1: deal the same game, or change it. Step 2: pick the blind/ante, then Deal
+  if(myDeal&&!dealStep)me_+=`<div class="row"><b>You're the dealer</b> <span class="clock" data-cd="${S.dealDl}"></span></div><div class="row act"><button class="g" data-a="dealgo">Deal: ${esc(S.gameName)}</button><button data-a="pickgame">🎲 Change game</button></div><small>Deal the same game again, or pick a different one.</small>`;
+  if(myDeal&&dealStep)me_+=`<div class="row"><b>Dealing ${esc(S.gameName)}</b> <span class="clock" data-cd="${S.dealDl}"></span></div><small>${S.game=='syn'||S.game=='bts'?'Choose the ante, then Deal.':'Choose the blind, then Deal.'}</small>${S.game=='syn'||S.game=='bts'?`<div class="row act"><span>Ante</span><button data-a="andn" aria-label="Lower ante">−</button><input id="dan" type="number" inputmode="numeric" min="100" step="100" value="${dan||S.ante}"><button data-a="anup" aria-label="Raise ante">+</button></div><div class="row act"><small style="flex:1">${S.game=='bts'?'One ante each makes the pot.':`One ante to join. Everyone gets 4 lives.${S.carry?` Plus ${S.carry} carried over.`:''}`}</small><button class="g" data-a="deal" data-until="${S.wait||0}">Deal</button></div>`:`<div class="row act"><span>Blind</span><button data-a="bbdn" aria-label="Lower blind">−</button><input id="dbb" type="number" inputmode="numeric" min="10" step="10" value="${dbb||S.bb}"><button data-a="bbup" aria-label="Raise blind">+</button></div><div class="row act"><small id="sbl" style="flex:1">Small blind ${(dbb||S.bb)/2}</small><button class="g" data-a="deal" data-until="${S.wait||0}">Deal</button></div>`}<div class="row"><button data-a="dealback">Back</button><small>Deal within the time or the deal passes to your left.</small></div>`;
   me_+=`<div class="row">${S.leave[me]?'<small>Standing up when this hand ends…</small>':`<button class="r" data-a="stand">Stand Up</button>`}${S.buy[me]?'<small>Chip request sent, waiting for host…</small>':'<button data-a="buy">Get more chips</button>'}</div>`;
   if(inH&&!H.done&&!S.leave[me])me_+='<small>Standing up mid-hand folds your cards.</small>';
   if((inG&&!H.done&&H.lives[my]>0)||(inB&&!H.done))me_+='<small>Standing up mid-game forfeits your ante.</small>'}
  if(picking&&myDeal){put(m,`<div class="p turn"><div class="row"><b style="flex:1">Choose the game</b><span class="clock" data-cd="${S.dealDl}"></span></div><small>You're the dealer. Pick what everyone plays next.</small>${S.games.map(g=>`<button class="game ${g.id==S.game?'cur':''}" data-a="setgame" data-v="${g.id}" ${g.ready?'':'disabled'}><b>${esc(g.name)}</b>${g.id==S.game?' <small>· now playing</small>':''}<br><small>${esc(g.blurb)}</small></button>`).join('')}<div class="row"><button data-a="unpick">Back</button></div></div>`);lastN=S.n;renderLobby();renderHost();renderAdmin();tick();return}
- if(!myDeal)picking=false;
+ if(!myDeal){picking=false;dealStep=0}
  const f=document.activeElement;
  if(!(f&&['dbb','dan','bta','rt'].includes(f.id)&&m.contains(f)))put(m,`<div class="tbl" style="aspect-ratio:${N<=3?'1/1':N<=7?'6/7':'4/5'}">${seats}<div class="mid">${board}</div><div class="info"><div style="font-size:16px"><i class="ch"></i><b>Pot ${pot}</b></div>${isBts&&!H.done&&H.stage!='bet'?`<div style="font-size:12px">${H.stage=='skip'?`No bet: ${esc(H.why)} · `:''}next player in <span data-cd="${H.nextAt||0}"></span></div>`:''}${isSyn&&!H.done?`<div style="font-size:12px">Round ${H.round}${H.stage=='reveal'?` · next round in <span data-cd="${H.nextAt||0}"></span>`:''}</div>`:''}<div style="font-size:12px">${S.hold=='host'?'<b style="color:#ffd54a">⏸ Paused by the host</b><br>':S.hold=='seats'?`<b style="color:#ffd54a">⏸ Waiting for the host to seat ${esc(Object.keys(S.pend).join(', '))}</b><br>`:''}${H?esc(H.msg):''}${S.again?`<br>Play again? ${Object.keys(S.again.yes).length} in so far <span data-cd="${S.again.until}"></span>`:!live&&S.dealDl&&dealer?`<br><span class="d">D</span>${esc(dealer)} deals next <span data-cd="${S.dealDl}"></span>`:!live&&!S.dealDl?'<br>Waiting for players':''}</div></div></div><div class="p ${(live&&H.turn==my&&my>=0)||myDeal||askMe?'turn':''}">${me_}</div>`);
  if(myDeal&&lastDeal!==S.dealDl){beep(523,.12);navigator.vibrate&&navigator.vibrate(120)}lastDeal=myDeal?S.dealDl:0;
@@ -170,7 +172,7 @@ function renderHost(){const e=$('#host'),f=document.activeElement;if(!host)retur
  const led=Object.keys(S.players).map(n=>{const seated=S.seats.includes(n),v=esc(n);return`<div class="row"><span style="flex:1">${v} ${seated?'':'<small>(away)</small>'}</span><b>${S.players[n].chips}</b>${adjFor==n?`<input data-adjin="${v}" type="number" placeholder="±" style="width:80px"><button class="g" data-a="adjok" data-v="${v}">OK</button>`:`<button data-a="adj" data-v="${v}">±</button>`}${S.players[n].bot?`<button data-a="rmbot" data-v="${v}">✕</button>`:seated?`<button data-a="kick" data-v="${v}" title="Stand this player up">⏏</button>`:''}</div>`}).join('');
  // someone waiting for a seat: the clocks are frozen until the host answers, so make it stand out
  const np=Object.keys(S.pend).length;if(np>lastPend){beep(880,.12);beep(660,.12,.15);navigator.vibrate&&navigator.vibrate([120,80,120])}lastPend=np;
- put(e,`<div class="p ${np?'turn':''}"><b>Host controls</b> <small>${esc(S.gameName)}</small><div class="row"><span style="flex:1">${st}</span><button data-a="pause" ${S.hold=='host'?'class="g">▶ Resume':'>⏸ Pause'}</button>${!live&&dn&&S.dealDl?`<button data-a="start" title="Deal for the dealer">Deal now</button>`:''}<button data-a="bot">+ Bot</button></div>
+ put(e,`<div class="p ${np?'turn':''}"><b>Host controls</b> <small>${esc(S.gameName)}</small><div class="row"><span style="flex:1">${st}</span><button data-a="pause" ${S.hold=='host'?'class="g">▶ Resume':'>⏸ Pause'}</button>${S.canUndo?`<button data-a="cancelgame" ${arm=='cancel'?'class="r">Tap again to confirm':`>${live?'Cancel game':'Undo last game'}`}</button>`:''}${!live&&dn&&S.dealDl?`<button data-a="start" title="Deal for the dealer">Deal now</button>`:''}<button data-a="bot">+ Bot</button></div>
  ${pend?'<h4>Seat requests <small>· timers paused until you answer</small></h4>'+pend:''}${buy?'<h4>Chip requests</h4>'+buy:''}${bust?'<h4>Out of chips</h4>'+bust:''}<h4>Chip ledger</h4>${led||'<small>No players yet</small>'}</div>`);tick()}
 document.addEventListener('click',async e=>{const b=e.target.closest('[data-a]');if(!b)return;const a=b.dataset.a,v=b.dataset.v;
  try{AC=AC||new AudioContext();AC.resume()}catch(x){}
@@ -194,7 +196,9 @@ document.addEventListener('click',async e=>{const b=e.target.closest('[data-a]')
  else if(a=='closerules'){$('#rules').hidden=true;return}
  else if(a=='pickgame'){picking=true;render()}
  else if(a=='unpick'){picking=false;render()}
- else if(a=='setgame'){send({t:'game',game:v});picking=false;render()}
+ else if(a=='setgame'){send({t:'game',game:v});picking=false;dealStep=1;render()}
+ else if(a=='dealgo'){dealStep=1;render()}
+ else if(a=='dealback'){dealStep=0;render()}
  else if(a=='bbup')setBB(+$('#dbb').value+10);
  else if(a=='bbdn')setBB(+$('#dbb').value-10);
  else if(a=='showkey'){showKey=true;renderAdmin();$('#ak').focus()}
@@ -217,6 +221,7 @@ document.addEventListener('click',async e=>{const b=e.target.closest('[data-a]')
  else if(!host)return;
  else if(a=='start')hs('start');
  else if(a=='pause')hs('pause',{on:S.hold!='host'});
+ else if(a=='cancelgame'){if(arm=='cancel'){arm='';hs('cancel')}else{arm='cancel';renderHost()}}
  else if(a=='ok'){hs('seat',{name:v,add:addAmt[v]});delete addAmt[v]}
  else if(a=='no')hs('noseat',{name:v});
  else if(a=='give'){hs('give',{name:v,add:addAmt[v]??1000});delete addAmt[v]}
