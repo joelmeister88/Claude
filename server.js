@@ -1,6 +1,8 @@
 'use strict';
 // Poker Night server: serves the page and runs the one table over WebSockets.
-// Env: PORT (default 3000), HOST_KEY (secret for the host link), DATA_FILE (where the table is saved).
+// Env: PORT (default 3000), HOST_KEY (the admin password), DATA_FILE (where the table is saved).
+// Roles: the host is the first device to join (approves seats, gives chips); the admin knows HOST_KEY
+// (can take over as host, delete saved names, reset everything); the dealer is whoever holds the button.
 const http = require('http'), fs = require('fs'), path = require('path'), crypto = require('crypto');
 const {WebSocketServer} = require('ws');
 const {createTable} = require('./engine');
@@ -14,13 +16,14 @@ let saved = {};
 try { saved = JSON.parse(fs.readFileSync(DATA, 'utf8')) } catch (e) { if (e.code != 'ENOENT') console.error('Could not read', DATA, e.message) }
 const HOST_KEY = process.env.HOST_KEY || saved.hostKey || crypto.randomBytes(9).toString('base64url');
 const auth = saved.auth || {}; // device token -> player name
+let hostToken = saved.hostToken || ''; // the host's device
 let saveT;
 function persist() {
   clearTimeout(saveT);
   saveT = setTimeout(() => {
     try {
       fs.mkdirSync(path.dirname(DATA), {recursive: true});
-      fs.writeFileSync(DATA + '.tmp', JSON.stringify({state: table.state(), auth, hostKey: process.env.HOST_KEY ? undefined : HOST_KEY}));
+      fs.writeFileSync(DATA + '.tmp', JSON.stringify({state: table.state(), auth, hostToken, hostKey: process.env.HOST_KEY ? undefined : HOST_KEY}));
       fs.renameSync(DATA + '.tmp', DATA);
     } catch (e) { console.error('Could not save table:', e.message) }
   }, 300);
@@ -45,18 +48,25 @@ const server = http.createServer((req, res) => {
 const clients = new Set();
 const wss = new WebSocketServer({server, path: '/ws', maxPayload: 4096});
 const send = (c, m) => { if (c.ws.readyState === 1) c.ws.send(JSON.stringify(m)) };
-const sendState = c => send(c, {t: 'state', s: table.view(c.name), now: Date.now()});
-function broadcast() { for (const c of clients) sendState(c) }
+const isHost = c => !!c.token && c.token === hostToken;
+const online = () => [...new Set([...clients].map(c => c.name).filter(Boolean))];
+function sendState(c, on = online()) {
+  send(c, {t: 'state', s: {...table.view(c.name), online: on, hostName: auth[hostToken] || ''}, now: Date.now(),
+    you: {name: c.name, host: isHost(c), admin: c.admin}});
+}
+function broadcast() { const on = online(); for (const c of clients) sendState(c, on) }
+// the first person to show up runs the table
+function claimHost(c) { if (!auth[hostToken] && c.name) { hostToken = c.token; persist() } }
 const keyOk = k => typeof k == 'string' && k.length == HOST_KEY.length && crypto.timingSafeEqual(Buffer.from(k), Buffer.from(HOST_KEY));
 // names are shown to everyone: letters, digits, spaces and a little punctuation only
 const cleanName = n => String(n || '').normalize('NFC').replace(/[^\p{L}\p{N} _.'-]/gu, '').replace(/\s+/g, ' ').trim().slice(0, 12);
 const isBotName = n => /^bot \d+$/i.test(n);
 
 wss.on('connection', ws => {
-  const c = {ws, token: '', name: '', host: false, alive: true, hits: 0};
+  const c = {ws, token: '', name: '', admin: false, alive: true, hits: 0, fails: 0};
   clients.add(c);
   ws.on('pong', () => c.alive = true);
-  ws.on('close', () => clients.delete(c));
+  ws.on('close', () => { clients.delete(c); if (c.name) broadcast() });
   ws.on('message', raw => {
     if (++c.hits > 30) return; // more than 30 messages a second: drop
     let m; try { m = JSON.parse(raw) } catch (e) { return }
@@ -64,9 +74,29 @@ wss.on('connection', ws => {
     const err = msg => send(c, {t: 'err', msg});
     if (m.t == 'hello') {
       if (typeof m.token == 'string' && auth[m.token]) { c.token = m.token; c.name = auth[m.token] }
-      c.host = keyOk(m.hostKey);
-      if (m.hostKey && !c.host) err('That host link is not valid');
-      send(c, {t: 'welcome', name: c.name, host: c.host}); return sendState(c);
+      c.admin = keyOk(m.hostKey);
+      if (m.hostKey && !c.admin) send(c, {t: 'badkey'});
+      claimHost(c); if (c.name) table.remember(c.name);
+      return broadcast();
+    }
+    if (m.t == 'admin') {
+      if (m.key !== undefined) {
+        if (++c.fails > 5) return err('Too many tries, reload the page');
+        if (!keyOk(m.key)) return err('Wrong admin password');
+        c.admin = true; send(c, {t: 'adminok', key: m.key}); return sendState(c);
+      }
+      if (!c.admin) return err('Admin only');
+      if (m.op == 'takeover') { if (!c.name) return err('Enter your name first'); hostToken = c.token; persist() }
+      else if (m.op == 'reset') {
+        table.reset(); for (const k in auth) delete auth[k]; hostToken = '';
+        for (const o of clients) o.name = ''; persist();
+      }
+      else if (m.op == 'forget') {
+        const n = String(m.name || ''), e = table.forget(n); if (e) return err(e);
+        for (const k in auth) if (auth[k] == n) delete auth[k];
+        for (const o of clients) if (o.name == n) o.name = ''; persist();
+      }
+      return broadcast();
     }
     if (m.t == 'name') {
       const n = cleanName(m.name);
@@ -77,10 +107,10 @@ wss.on('connection', ws => {
       // a name is locked while another device using it is connected; otherwise a returning player can reclaim it
       for (const o of clients) if (o !== c && o.name == n && o.token != c.token) return err(n + ' is already playing');
       if (!c.token) c.token = crypto.randomBytes(18).toString('base64url');
-      auth[c.token] = n; c.name = n; persist();
-      send(c, {t: 'welcome', name: n, host: c.host, token: c.token}); return sendState(c);
+      auth[c.token] = n; c.name = n; claimHost(c); persist();
+      send(c, {t: 'token', token: c.token}); table.remember(n); return broadcast();
     }
-    if (m.t == 'host') { if (!c.host) return err('Only the host can do that'); const e = table.host(m); return e && err(e) }
+    if (m.t == 'host') { if (!isHost(c)) return err('Only the host can do that'); const e = table.host(m); return e && err(e) }
     if (!c.name) return err('Enter your name first');
     const e = table.player(c.name, m); if (e) err(e);
   });
@@ -92,5 +122,5 @@ setInterval(() => { for (const c of clients) c.hits = 0 }, 1000);
 
 server.listen(PORT, () => {
   console.log(`Poker Night on http://localhost:${PORT}`);
-  console.log(`Host link: <your address>/#host=${HOST_KEY}` + (process.env.HOST_KEY ? '' : '  (set HOST_KEY to choose your own)'));
+  console.log(`Admin link: <your address>/#host=${HOST_KEY}` + (process.env.HOST_KEY ? '' : '  (set HOST_KEY to choose your own)'));
 });

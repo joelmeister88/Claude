@@ -150,3 +150,52 @@ test('three timeouts in a row stand a player up; acting resets the count', () =>
   assert.ok(t.state().players[slow].chips > 0, 'chips kept');
   assert.equal(t.state().players[slow].miss, 0, 'count starts over if they sit back down');
 });
+
+test('the dealer deals with their own blinds; nobody else can', () => {
+  const c = clock(), t = createTable(null, {now: c});
+  for (const n of ['A', 'B', 'C']) { t.player(n, {t: 'sit'}); t.host({op: 'seat', name: n}) }
+  const s = t.state();
+  assert.equal(s.seats[s.dealer], 'A', 'first dealer is the first seat');
+  assert.equal(s.dealDl, c.t + 30000);
+  assert.equal(t.player('B', {t: 'deal'}), "You're not the dealer");
+  assert.match(t.player('A', {t: 'deal', sb: 50, bb: 25}), /at least the small blind/);
+  assert.equal(t.player('A', {t: 'deal', sb: 25, bb: 50}), undefined);
+  assert.equal(s.btn, 0); assert.equal(s.sb, 25); assert.equal(s.hand.cur, 50);
+  for (let g = 0; g < 50 && !s.hand.done; g++) t.player(s.seats[s.hand.turn], {t: 'act', a: 'fold'});
+  assert.equal(s.seats[s.dealer], 'B', 'button moves one to the left');
+  assert.equal(s.dealDl, c.t + 10000 + 30000, 'clock starts after the 10s pause');
+});
+
+test('a dealer who waits 30s passes the deal to the left', () => {
+  const c = clock(), t = createTable(null, {now: c});
+  for (const n of ['A', 'B', 'C']) { t.player(n, {t: 'sit'}); t.host({op: 'seat', name: n}) }
+  const s = t.state();
+  c.t += 29999; t.tick(); assert.equal(s.seats[s.dealer], 'A');
+  c.t += 1; t.tick(); assert.equal(s.seats[s.dealer], 'B');
+  assert.equal(s.dealDl, c.t + 30000, 'new dealer gets a fresh 30s');
+  assert.equal(t.player('A', {t: 'deal'}), "You're not the dealer");
+  c.t += 30000; t.tick(); c.t += 30000; t.tick();
+  assert.equal(s.seats[s.dealer], 'A', 'and around the table');
+});
+
+test('a bot dealer deals by itself when a person is playing', () => {
+  const c = clock(), t = createTable(null, {now: c});
+  t.host({op: 'bot'}); t.host({op: 'bot'});
+  c.t += 5000; t.tick(); assert.ok(!t.state().hand, 'bots alone do not start');
+  t.player('Ann', {t: 'sit'}); t.host({op: 'seat', name: 'Ann'});
+  c.t += 2000; t.tick();
+  assert.ok(t.state().hand && !t.state().hand.done);
+});
+
+test('name history: remembers people (not bots), forget and reset', () => {
+  const c = clock(), t = createTable({players: {Old: {chips: 300}, 'Bot 1': {chips: 5, bot: 1}}}, {now: c});
+  assert.deepEqual(t.view('').known, ['Old']);
+  t.remember('Pat'); c.t += 1; t.remember('Sam');
+  assert.deepEqual(t.view('').known, ['Sam', 'Pat', 'Old'], 'most recent first');
+  t.player('Pat', {t: 'sit'});
+  assert.match(t.forget('Pat'), /at the table/);
+  assert.equal(t.forget('Old'), undefined);
+  assert.ok(!t.state().players.Old && !t.view('').known.includes('Old'));
+  t.reset();
+  assert.deepEqual(t.view('').known, []); assert.deepEqual(t.state().players, {}); assert.ok(t.state().seats.every(x => !x));
+});

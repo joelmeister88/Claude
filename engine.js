@@ -6,7 +6,7 @@ const crypto = require('crypto');
 
 const GAMES = {holdem: {name: "Texas Hold'em", hole: 2}};
 const HN = ['High card', 'Pair', 'Two pair', 'Trips', 'Straight', 'Flush', 'Full house', 'Quads', 'Straight flush'];
-const WAIT = 10000, BUST = 30000, TURN = 30000, MISSES = 3, BOT_DELAY = 1300, SEATS = 12;
+const WAIT = 10000, BUST = 30000, TURN = 30000, DEAL = 30000, MISSES = 3, BOT_DELAY = 1300, SEATS = 12;
 
 // ---------- hand evaluation (cards are 0..51: rank c%13, 0='2'..12='A'; suit c/13) ----------
 function s5(c) {
@@ -35,7 +35,7 @@ function cryptoShuffle() {
 }
 
 const fresh = () => ({players: {}, seats: Array(SEATS).fill(''), pend: {}, leave: {}, bust: {}, buy: {}, wait: 0,
-  hand: null, btn: -1, sb: 5, bb: 10, game: 'holdem', n: 0, last: -1});
+  hand: null, btn: -1, dealer: -1, dealDl: 0, sb: 5, bb: 10, game: 'holdem', n: 0, last: -1, known: {}});
 const int = v => { const x = Math.floor(+v); return Number.isFinite(x) ? x : NaN };
 
 /**
@@ -46,10 +46,13 @@ function createTable(saved, {now = Date.now, random = Math.random, shuffle = cry
   const S = Object.assign(fresh(), saved || {});
   // a restart shouldn't time out whoever was mid-decision
   if (S.hand && !S.hand.done) S.hand.dl = now() + TURN;
+  S.dealDl = 0;
+  // name history: everyone who has played here, bots excluded
+  for (const n in S.players) if (!S.players[n].bot && !S.known[n]) S.known[n] = 1;
   let botAt = 0;
 
   function changed() {
-    S.n++; tidy();
+    S.n++; tidy(); dealerUpkeep();
     const H = S.hand, p = H && !H.done && S.players[S.seats[H.turn]];
     botAt = p && p.bot ? now() + BOT_DELAY : 0;
     // each new decision gets a fresh 30s turn clock (bots move on their own timer)
@@ -65,6 +68,17 @@ function createTable(saved, {now = Date.now, random = Math.random, shuffle = cry
     for (const n of Object.keys(S.bust).concat(Object.keys(S.buy)))
       if (!S.seats.includes(n) || S.players[n].chips > 0) { delete S.bust[n]; delete S.buy[n] }
   }
+  // ---------- the dealer (button) deals the next hand and picks the blinds ----------
+  const eligible = i => { const n = S.seats[i]; return !!n && S.players[n].chips > 0 && !S.leave[n] };
+  function nextEligible(from) { for (let k = 1; k <= SEATS; k++) { const i = (from + k + SEATS) % SEATS; if (eligible(i)) return i } return -1 }
+  const canDeal = () => !live() && !owed().length && S.seats.filter((n, i) => eligible(i)).length >= 2;
+  // keep `dealer` on a seat that can deal, and run its 30s clock once dealing is possible (after the 10s pause)
+  function dealerUpkeep() {
+    if (live()) { S.dealDl = 0; return }
+    if (S.dealer < 0 || !eligible(S.dealer)) { S.dealer = nextEligible(S.dealer >= 0 ? S.dealer : S.btn); S.dealDl = 0 }
+    if (!canDeal()) S.dealDl = 0;
+    else if (!S.dealDl) S.dealDl = Math.max(now(), S.wait) + DEAL;
+  }
   function stand(n) { const i = S.seats.indexOf(n); if (i >= 0) S.seats[i] = ''; delete S.leave[n]; delete S.bust[n]; delete S.buy[n]; if (S.players[n]) S.players[n].miss = 0 }
   // standing up mid-hand: fold when the action reaches them, leave the seat when the hand ends
   function standOrLeave(n) { if (inLiveHand(n)) { S.leave[n] = 1; autoFold() } else stand(n) }
@@ -76,11 +90,10 @@ function createTable(saved, {now = Date.now, random = Math.random, shuffle = cry
     if (live()) return 'Hand in progress';
     const o = owed(); if (o.length) return 'Waiting on ' + o.join(', ') + ' to get chips or stand up';
     if (now() < S.wait) return 'Next hand can be dealt in a moment';
-    const g = GAMES[S.game]; let nb = -1;
-    for (let k = 1; k <= SEATS; k++) { const i = (S.btn + k + SEATS) % SEATS, n = S.seats[i]; if (n && S.players[n].chips > 0) { nb = i; break } }
+    const g = GAMES[S.game], nb = S.dealer >= 0 && eligible(S.dealer) ? S.dealer : nextEligible(S.btn);
     const ps = []; for (let k = 1; k <= SEATS; k++) { const i = (nb + k) % SEATS, n = S.seats[i]; if (n && S.players[n].chips > 0) ps.push(i) }
     if (ps.length < 2) return 'Need at least 2 seated players with chips';
-    S.btn = nb; const d = shuffle();
+    S.btn = S.dealer = nb; S.dealDl = 0; const d = shuffle();
     const h = {}, bet = {}, tot = {}; ps.forEach(i => { h[i] = Array.from({length: g.hole}, () => d.pop()); bet[i] = 0; tot[i] = 0 });
     const H = S.hand = {ps, btn: nb, d, board: [], h, bet, tot, fold: {}, allin: {}, acted: {}, stage: 0, cur: S.bb, minR: S.bb, turn: -1, done: 0, show: 0, msg: 'New hand'};
     const hu = ps.length == 2, sb = hu ? ps[1] : ps[0], bb = hu ? ps[0] : ps[1], first = hu ? ps[1] : ps[2 % ps.length];
@@ -92,6 +105,7 @@ function createTable(saved, {now = Date.now, random = Math.random, shuffle = cry
   function endHand() {
     const t = now(); S.hand.done = 1; S.wait = t + WAIT; Object.keys(S.leave).forEach(stand);
     S.seats.forEach(n => { if (n && S.players[n].chips <= 0) { if (S.players[n].bot) stand(n); else if (!S.buy[n]) S.bust[n] = t + BUST } });
+    S.dealer = nextEligible(S.hand.btn); S.dealDl = 0; // the button moves one to the left
   }
   function finish(lv) { const H = S.hand, n = S.seats[lv[0]], pot = Object.values(H.tot).reduce((a, b) => a + b, 0); S.players[n].chips += pot; H.msg = n + ' wins ' + pot; endHand() }
   function showdown(lv) {
@@ -142,6 +156,13 @@ function createTable(saved, {now = Date.now, random = Math.random, shuffle = cry
     else if (m.t == 'unsit') delete S.pend[n];
     else if (m.t == 'stand') { if (!seated) return; standOrLeave(n) }
     else if (m.t == 'buy') { if (!seated) return; delete S.bust[n]; S.buy[n] = 1 }
+    else if (m.t == 'deal') {
+      if (S.seats[S.dealer] !== n) return "You're not the dealer";
+      const sb = m.sb == null ? S.sb : int(m.sb), bb = m.bb == null ? S.bb : int(m.bb);
+      if (!(sb >= 1 && bb >= sb)) return 'Big blind must be at least the small blind';
+      const keep = [S.sb, S.bb]; S.sb = sb; S.bb = bb;
+      const e = startHand(); if (e) { [S.sb, S.bb] = keep; return e }
+    }
     else if (m.t == 'act') { if (!live() || S.seats[S.hand.turn] !== n) return 'Not your turn'; S.players[n].miss = 0; act(n, m.a, m.amt) }
     else return;
     changed();
@@ -183,9 +204,18 @@ function createTable(saved, {now = Date.now, random = Math.random, shuffle = cry
       const opts = need > 0 ? ['fold', 'call', 'raise'] : ['call', 'raise'], a = opts[random() * opts.length | 0];
       act(n, a, H.cur + H.minR * (1 + (random() * 4 | 0)) + (random() < .1 ? p.chips : 0)); ch = 1;
     }
+    // dealer didn't deal in time: the deal passes to the left
+    if (S.dealDl && t >= S.dealDl && canDeal()) {
+      const from = S.seats[S.dealer]; S.dealer = nextEligible(S.dealer); S.dealDl = 0;
+      if (S.hand) S.hand.msg = from + ' passed the deal to ' + S.seats[S.dealer];
+      ch = 1;
+    }
+    // a bot dealer deals on its own, as long as a person is playing
+    if (canDeal() && S.dealer >= 0 && S.players[S.seats[S.dealer]].bot && t >= S.wait + BOT_DELAY &&
+        S.seats.some(n => n && !S.players[n].bot && S.players[n].chips > 0) && !startHand()) ch = 1;
     // turn clock ran out: check if possible, else fold; the third miss in a row stands them up
-    if (live() && H.dl && t >= H.dl) {
-      const n = S.seats[H.turn], p = S.players[n], need = H.cur - H.bet[H.turn];
+    if (live() && S.hand.dl && t >= S.hand.dl) {
+      const H = S.hand, n = S.seats[H.turn], p = S.players[n], need = H.cur - H.bet[H.turn];
       p.miss = (p.miss || 0) + 1; const out = p.miss >= MISSES;
       act(n, need > 0 ? 'fold' : 'call');
       if (out) standOrLeave(n);
@@ -194,6 +224,16 @@ function createTable(saved, {now = Date.now, random = Math.random, shuffle = cry
     }
     if (ch) changed();
   }
+  /** Add a person's name to the history. */
+  function remember(n) { if (!S.known[n] || S.known[n] < now() - 60000) { S.known[n] = now(); changed() } }
+  /** Delete a name from the history, with its saved chips. Returns an error message, or undefined. */
+  function forget(n) {
+    if (!S.known[n] && !S.players[n]) return 'No such name';
+    if (S.seats.includes(n) || S.pend[n]) return n + ' is at the table: stand them up first';
+    delete S.known[n]; delete S.players[n]; changed();
+  }
+  /** Start over: no players, no chips, no history. */
+  function reset() { for (const k of Object.keys(S)) delete S[k]; Object.assign(S, fresh()); botAt = 0; changed() }
   /** What one viewer may see: no deck, and hole cards only for themselves (and live hands at showdown). */
   function view(name) {
     const H = S.hand; let hand = null;
@@ -204,9 +244,10 @@ function createTable(saved, {now = Date.now, random = Math.random, shuffle = cry
     }
     const players = {}; for (const n in S.players) players[n] = {chips: S.players[n].chips, bot: !!S.players[n].bot};
     return {players, seats: S.seats, pend: S.pend, leave: S.leave, bust: S.bust, buy: S.buy, wait: S.wait, hand,
-      btn: S.btn, sb: S.sb, bb: S.bb, game: S.game, gameName: GAMES[S.game].name, n: S.n};
+      btn: S.btn, dealer: S.dealer, dealDl: S.dealDl, sb: S.sb, bb: S.bb, game: S.game, gameName: GAMES[S.game].name, n: S.n,
+      known: Object.keys(S.known).sort((a, b) => S.known[b] - S.known[a])};
   }
-  return {state: () => S, view, player, host, tick};
+  return {state: () => S, view, player, host, tick, remember, forget, reset};
 }
 
 module.exports = {createTable, best, s5, category, WAIT, BUST, TURN, SEATS};

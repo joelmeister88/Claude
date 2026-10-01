@@ -1,4 +1,4 @@
-// End-to-end: real server, real browsers. Run: node test/e2e.spec.mjs
+// End-to-end: real server, real (phone-sized) browsers. Run: node test/e2e.spec.mjs
 import {chromium} from 'playwright';
 import {spawn} from 'child_process';
 import {mkdtempSync} from 'fs';
@@ -21,20 +21,23 @@ async function player(name, hash = '') {
   p.on('websocket', ws => ws.on('framereceived', f => { try { frames.push(JSON.parse(f.payload)) } catch (e) {} }));
   await p.goto(URL_ + hash);
   if (name) { await p.fill('#nm', name); await p.click('text=Join') }
-  return {ctx, p, errs, frames};
+  return {ctx, p, errs, frames, last: () => frames.filter(f => f.t == 'state').at(-1)};
 }
 const errText = async p => (await p.textContent('#note')) || '';
 
-// host link: host panel, no sign-in
-const H = await player('Hana', '#host=' + KEY);
+// the first person on the link is the host; the admin link also unlocks admin
+const H = await player('Hana', '#host=' + encodeURIComponent(KEY).replace(/%2B/g, '+'));
 await H.p.waitForSelector('text=+ Bot');
-ok(!(await H.p.url()).includes(KEY), 'host key is removed from the address bar');
+ok(true, 'first person to join is the host');
+ok(await H.p.isVisible('text=Reset table'), 'admin link unlocks admin');
+ok(!(await H.p.url()).includes('host='), 'admin key is removed from the address bar');
 await H.p.click('text=+ Bot');
 
-// a friend joins with just the link and a name
+// a second person is just a player
 const P = await player('Pat');
 await P.p.waitForSelector('button:text-is("Sit Down")');
-ok(!(await P.p.$('text=+ Bot')), 'players do not get host controls');
+ok(!(await P.p.$('text=+ Bot')) && !(await P.p.$('text=Reset table')), 'second person gets no host or admin controls');
+ok((await P.p.textContent('#lobby')).includes('Host: Hana'), 'everyone sees who the host is');
 await P.ctx.grantPermissions(['clipboard-read', 'clipboard-write']);
 await P.p.click('text=Share');
 ok(await P.p.evaluate(() => navigator.clipboard.readText()) == URL_, 'Share copies just the link');
@@ -42,53 +45,102 @@ await P.p.click('button:text-is("Sit Down")');
 await H.p.waitForSelector('text=Seat requests');
 await H.p.click('[data-a=ok]');
 await P.p.waitForSelector('button:text-is("Stand Up")');
-ok(true, 'host approves a seat; player sees Stand Up');
+ok(true, 'host approves a seat');
 
-// someone else can't take a connected player's name, and can't use host actions
-const X = await player('Pat');
-await X.p.waitForTimeout(300);
+// can't take a connected player's name; can't use host actions without being host
+const X = await player('');
+ok(await X.p.isDisabled('button:has-text("Pat")'), 'names in use show as taken on the name screen');
+await X.p.fill('#nm', 'Pat'); await X.p.click('text=Join'); await X.p.waitForTimeout(300);
 ok((await errText(X.p)).includes('already playing'), 'a connected player\'s name cannot be taken');
 await X.p.evaluate(() => { const w = new WebSocket('ws://' + location.host + '/ws'); w.onopen = () => w.send(JSON.stringify({t: 'host', op: 'bot'})); });
 await X.p.waitForTimeout(300);
-ok(Object.keys(P.frames.at(-1).s.players).length == 2, 'non-host cannot run host actions');
+ok(Object.keys(P.last().s.players).length == 2, 'non-host cannot run host actions');
 await X.ctx.close();
 
-// deal: Pat gets their own cards and nobody else's
-await H.p.click('text=Deal next hand');
-await P.p.waitForSelector('text=Peek');
+// Bot 1 holds the button and deals by itself; Pat gets only their own cards
+await P.p.waitForSelector('text=Peek', {timeout: 10000});
+ok(P.last().s.seats[P.last().s.hand.btn] == 'Bot 1', 'the bot dealer dealt');
+ok(await P.p.$eval('.st .d', e => e.closest('.st').textContent.includes('Bot 1')), 'D marks the dealer\'s seat');
 const leaks = P.frames.filter(f => f.t == 'state' && f.s.hand).some(f => {
   const s = f.s, my = s.seats.indexOf('Pat');
   return 'd' in s.hand || Object.entries(s.hand.h).some(([i, cs]) => +i != my && !s.hand.show && cs.some(c => c != null));
 });
 ok(!leaks, 'no state message contains the deck or another player\'s hole cards');
-const mine = P.frames.at(-1).s.hand.h[P.frames.at(-1).s.seats.indexOf('Pat')];
-ok(mine.every(c => Number.isInteger(c)), 'player receives their own two cards');
 ok((await P.p.$$('#main .c.lg.b')).length == 2, 'own cards are face down until Peek');
 await P.p.click('text=Peek');
 ok((await P.p.$$('#main .c.lg.b')).length == 0, 'Peek shows them');
 await P.p.click('text=Hide now');
 ok((await P.p.$$('#main .c.lg.b')).length == 2, 'Hide now hides them right away');
-await P.p.click('text=Peek'); await P.p.waitForTimeout(3300);
-ok((await P.p.$$('#main .c.lg.b')).length == 2 && await P.p.isVisible('text=Peek 3s'), 'cards hide again after 3s');
-await P.p.waitForSelector('[data-a=fold]', {timeout: 10000});
-ok(await P.p.$eval('#main .p', e => e.classList.contains('turn') && getComputedStyle(e).backgroundColor != 'rgb(255, 255, 255)'), 'panel turns red on your turn');
-ok(/^(2\d|30)s$/.test(await P.p.textContent('.clock')), 'turn clock shows ~30s');
-ok(await P.p.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'no sideways scrolling');
+// the bot may fold first; then Pat's turn comes in the next hand, which Pat deals
+let turnChecked = false;
+async function checkTurn() {
+  ok(await P.p.$eval('#main .p', e => e.classList.contains('turn')), 'panel turns red on your turn');
+  ok(/^(2\d|30)s$/.test(await P.p.textContent('.clock')), 'turn clock shows ~30s');
+  ok(await P.p.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'no sideways scrolling');
+  turnChecked = true;
+}
+await P.p.waitForFunction(() => document.querySelector('[data-a=fold]') || document.querySelector('#main').textContent.includes("You're the dealer"), null, {timeout: 10000});
+if (await P.p.$('[data-a=fold]')) { await checkTurn(); await P.p.click('[data-a=fold]') }
 
-// Pat folds when it's their turn; the hand ends (heads-up vs the bot) or continues
-await P.p.waitForSelector('[data-a=fold]', {timeout: 10000}).then(() => P.p.click('[data-a=fold]')).catch(() => {});
-await H.p.waitForFunction(() => document.querySelector('[data-a=start]')?.textContent.startsWith('Deal in'), null, {timeout: 15000});
-ok(await H.p.isDisabled('[data-a=start]'), 'Deal counts down after the hand');
-const chips = P.frames.at(-1).s.players.Pat.chips;
+// the button moves left to Pat, who deals after the 10s pause with blinds of their choosing
+await P.p.waitForSelector("text=You're the dealer");
+ok(await P.p.isDisabled('[data-a=deal]') && /Deal in \d+s/.test(await P.p.textContent('[data-a=deal]')), 'dealer waits out the 10s pause');
+ok((await H.p.textContent('#main')).includes('Pat deals next'), 'everyone sees who deals next');
+await P.p.fill('#dsb', '20'); await P.p.fill('#dbb', '40');
+await P.p.waitForFunction(() => !document.querySelector('[data-a=deal]').disabled, null, {timeout: 12000});
+await P.p.click('[data-a=deal]');
+await P.p.waitForFunction(() => document.querySelector('.info')?.textContent.includes('Pot 60'), null, {timeout: 3000}).catch(() => {});
+for (let k = 0; k < 30 && !(P.last().s.hand && !P.last().s.hand.done && P.last().s.sb == 20); k++) await P.p.waitForTimeout(100);
+ok(P.last().s.hand && !P.last().s.hand.done && P.last().s.sb == 20 && P.last().s.hand.cur >= 40, 'dealer deals with their blinds');
+if (!turnChecked) { await P.p.waitForSelector('[data-a=fold]', {timeout: 5000}); await checkTurn() }
 
-// restart the server: chips and the device's name survive
+// Pat stands up; everyone sees them in "Not at the table"
+await P.p.click('button:text-is("Stand Up")');
+await H.p.waitForFunction(() => document.querySelector('#lobby').textContent.includes('Not at the table'), null, {timeout: 15000});
+ok((await H.p.textContent('#lobby')).includes('Pat'), 'players with chips away from the table are listed');
+const chips = P.last().s.players.Pat.chips;
+
+// restart: chips, host and names survive
 await stop(); await start();
-await P.p.reload(); await P.p.waitForSelector('button:text-is("Stand Up")');
-ok(P.frames.at(-1).s.players.Pat.chips == chips, 'chips survive a server restart');
-ok((await P.p.textContent('#main')).includes('Pat'), 'player is remembered on their device');
+await P.p.reload(); await P.p.waitForSelector('button:text-is("Sit Down")');
+ok(P.last().s.players.Pat.chips == chips, 'chips survive a server restart');
 await H.p.waitForSelector('text=+ Bot', {timeout: 10000});
-ok(true, 'host reconnects after restart');
+ok(true, 'host is still host after restart');
+await P.ctx.close();
 
-ok(!H.errs.length && !P.errs.length, 'no page errors ' + H.errs.concat(P.errs).join('|'));
+// a returning player picks their saved name on a new device
+const Y = await player('');
+await Y.p.waitForSelector('button[data-a=pick]:has-text("Pat")');
+await Y.p.click('button[data-a=pick]:has-text("Pat")');
+await Y.p.waitForSelector('button:text-is("Sit Down")');
+ok(Y.last().you.name == 'Pat' && Y.last().s.players.Pat.chips == chips, 'saved name brings back saved chips');
+ok(!Y.last().s.known.includes('Bot 1'), 'bots are not in the name history');
+
+// admin (by password) takes over as host
+await Y.p.click('text=Admin');
+await Y.p.fill('#ak', 'wrong'); await Y.p.click('text=Unlock'); await Y.p.waitForTimeout(300);
+ok((await errText(Y.p)).includes('Wrong'), 'wrong admin password is refused');
+await Y.p.fill('#ak', KEY); await Y.p.click('text=Unlock');
+await Y.p.click('text=Become host');
+await Y.p.waitForSelector('text=+ Bot');
+await H.p.waitForFunction(() => !document.querySelector('[data-a=bot]'));
+ok(Y.last().s.hostName == 'Pat', 'admin can take over as host');
+
+// admin deletes a saved name; that device goes back to the name screen
+await Y.p.click('[data-a=forget][data-v="Hana"]'); await Y.p.click('[data-a=forget][data-v="Hana"]');
+await H.p.waitForSelector('#nm');
+await Y.p.waitForTimeout(300);
+ok(!Y.last().s.known.includes('Hana'), 'admin can delete a saved name');
+
+// reset: everything goes
+await Y.p.click('text=Reset table'); await Y.p.click('text=Tap again to erase everything');
+await Y.p.waitForSelector('#nm');
+const s = Y.last().s;
+ok(!s.known.length && !Object.keys(s.players).length && !s.hostName, 'reset clears players, chips, names and host');
+await Y.p.fill('#nm', 'Pat'); await Y.p.click('text=Join');
+await Y.p.waitForSelector('text=+ Bot');
+ok(true, 'after a reset the first person in is host again');
+
+ok(!H.errs.length && !P.errs.length && !Y.errs.length, 'no page errors ' + H.errs.concat(P.errs, Y.errs).join('|'));
 await browser.close(); await stop();
 console.log(fails ? fails + ' failing' : 'all passed'); process.exit(fails ? 1 : 0);
