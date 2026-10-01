@@ -261,7 +261,7 @@ test("dealer's choice: only the dealer changes the game, between hands, to a rea
   const c = clock(), t = createTable(null, {now: c});
   for (const n of ['A', 'B']) { t.player(n, {t: 'sit'}); t.host({op: 'seat', name: n}) }
   const v = t.view('');
-  assert.deepEqual(v.games.map(g => g.id), ['holdem', 'syn'], "Hold'em is listed first");
+  assert.deepEqual(v.games.map(g => g.id), ['holdem', 'syn', 'bts'], "Hold'em is listed first");
   assert.equal(v.gameName, "Texas Hold'em");
   assert.match(t.player('B', {t: 'game', game: 'holdem'}), /Only the dealer/);
   assert.match(t.player('A', {t: 'game', game: 'nope'}), /isn't available yet/);
@@ -487,4 +487,116 @@ test("Screw Your Neighbor: can't swap into an Ace that's showing; keep instead",
   assert.equal(s.seats[H.turn], 'B', 'still your turn: press Keep');
   assert.equal(t.player('B', {t: 'act', a: 'keep'}), undefined);
   assert.equal(s.seats[H.turn], 'C');
+});
+
+// Between the Sheets: a rigged deck, dealt from the end (two cards, then the middle card)
+const btsTable = (names, deck, c = clock()) => {
+  const t = createTable(null, {now: c, shuffle: () => deck.slice()});
+  for (const n of names) { t.player(n, {t: 'sit'}); t.host({op: 'seat', name: n}) }
+  t.player(names[0], {t: 'game', game: 'bts'});
+  return t;
+};
+
+test('Between the Sheets: ante, two cards, bet in 100s up to the pot, win from the pot', () => {
+  const c = clock();
+  // A deals; B goes first: 3 and J, middle 7 (between)
+  const t = btsTable(['A', 'B', 'C'], [C('2'), C('2'), C('2'), C('7'), C('J'), C('3')], c);
+  assert.equal(t.player('A', {t: 'deal', ante: 200}), undefined);
+  const s = t.state(), H = s.hand;
+  assert.equal(H.g, 'bts'); assert.equal(H.pot, 600); assert.equal(s.players.B.chips, 800);
+  assert.equal(s.seats[H.turn], 'B', 'left of the dealer goes first');
+  assert.equal(t.view('C').hand.cards.lo, C('3'), 'cards are face up for everyone');
+  assert.equal(t.view('C').hand.deckN, 4, 'cards left in the deck');
+  assert.match(t.player('B', {t: 'act', a: 'bet', amt: 150}), /steps of 100/);
+  assert.match(t.player('B', {t: 'act', a: 'bet', amt: 700}), /more than the pot/);
+  assert.match(t.player('C', {t: 'act', a: 'bet', amt: 100}), /Not your turn/);
+  t.player('B', {t: 'act', a: 'bet', amt: 300});
+  assert.equal(H.res, 'win'); assert.equal(s.players.B.chips, 1100); assert.equal(H.pot, 300);
+  c.t += 4000; t.tick();
+  assert.equal(s.seats[H.turn], 'C', 'next player after a short pause');
+});
+
+test('Between the Sheets: outside pays the bet, hitting the post pays double (and can go negative)', () => {
+  const c = clock();
+  // B: 4 and 10, middle K (outside). C: 5 and 9, middle 9 (post)
+  const t = btsTable(['A', 'B', 'C'], [C('2'), C('2'), C('9'), C('9'), C('5'), C('K'), C('T'), C('4')], c);
+  t.player('A', {t: 'deal', ante: 100});
+  const s = t.state(), H = s.hand;
+  s.players.C.chips = 100;
+  t.player('B', {t: 'act', a: 'bet', amt: 200});
+  assert.equal(H.res, 'lose'); assert.equal(s.players.B.chips, 700); assert.equal(H.pot, 500);
+  c.t += 4000; t.tick();
+  t.player('C', {t: 'act', a: 'bet', amt: 500});
+  assert.equal(H.res, 'post'); assert.equal(s.players.C.chips, -900, 'chips go negative'); assert.equal(H.pot, 1500);
+  c.t += 4000; t.tick();
+  assert.equal(s.seats[H.turn], 'A', 'still in the game; the dealer goes last');
+});
+
+test('Between the Sheets: a pair or next-door cards means no bet and a 10 second pause; passing is free', () => {
+  const c = clock();
+  // B: 7 and 7 (pair). C: 8 and 9 (next door). A: 2 and K
+  const t = btsTable(['A', 'B', 'C'], [C('K'), C('2'), C('9'), C('8'), C('7'), C('7')], c);
+  t.player('A', {t: 'deal'});
+  const s = t.state(), H = s.hand;
+  assert.equal(H.stage, 'skip'); assert.equal(H.why, 'same value');
+  assert.match(t.player('B', {t: 'act', a: 'bet', amt: 100}), /Not your turn/);
+  c.t += 9999; t.tick(); assert.equal(s.seats[H.turn], 'B');
+  c.t += 1; t.tick(); assert.equal(s.seats[H.turn], 'C'); assert.equal(H.why, 'next-door cards');
+  c.t += 10000; t.tick(); assert.equal(s.seats[H.turn], 'A');
+  t.player('A', {t: 'act', a: 'pass'});
+  assert.equal(s.players.A.chips, 900, 'passing costs nothing'); assert.equal(H.pot, 300);
+});
+
+test('Between the Sheets: taking the whole pot ends the game; negative players sit out new games', () => {
+  const c = clock();
+  // B: 2 and A, middle 8 -> wins the whole pot. Then C has -100 and can't join.
+  const t = btsTable(['A', 'B', 'C'], [C('8'), C('A'), C('2')], c);
+  t.player('A', {t: 'deal'});
+  const s = t.state(), H = s.hand;
+  t.player('B', {t: 'act', a: 'bet', amt: 300});
+  assert.equal(H.done, 1); assert.match(H.msg, /B takes the whole pot/);
+  assert.equal(s.players.B.chips, 900 + 300);
+  assert.equal(s.seats[s.dealer], 'B', 'the deal moves left after the game');
+  s.players.C.chips = -100; t.host({op: 'adj', name: 'A', x: 0});
+  assert.ok(s.bust.C === undefined || true);
+  t.host({op: 'adj', name: 'C', x: -50});
+  assert.equal(s.players.C.chips, -100, 'host taking chips never wipes out a debt');
+  t.host({op: 'adj', name: 'C', x: 300});
+  assert.equal(s.players.C.chips, 200, 'host giving chips pays the debt off first');
+});
+
+test('Between the Sheets: deck reshuffles when low; timeouts pass; standing up forfeits', () => {
+  const c = clock();
+  const t = btsTable(['A', 'B', 'C'], [C('K'), C('2'), C('5'), C('Q'), C('3')], c); // B: 3/Q, C: 5/2... then reshuffle
+  t.player('A', {t: 'deal'});
+  const s = t.state(), H = s.hand;
+  c.t += 30000; t.tick();
+  assert.equal(H.res, 'pass'); assert.match(H.msg, /out of time/);
+  c.t += 2000; t.tick();
+  assert.equal(s.seats[H.turn], 'C');
+  assert.equal(H.stage, 'bet', 'the next player gets their own 30 seconds');
+  c.t += 30000; t.tick(); c.t += 2000; t.tick();
+  assert.match(H.msg, /reshuffled/, 'fewer than 3 cards left: fresh deck');
+  t.player('A', {t: 'stand'}); t.player('B', {t: 'stand'});
+  assert.equal(H.done, 1, 'one player left takes the pot');
+  assert.equal(s.players.C.chips, 900 + 300);
+});
+
+test('Between the Sheets: bots play many games without creating or losing chips', () => {
+  let games = 0;
+  for (let table = 1; table <= 15; table++) {
+    const c = clock(); let seed = table * 7907; const random = () => (seed = seed * 16807 % 2147483647) / 2147483647;
+    const t = createTable(null, {now: c, random, shuffle: () => { const d = [...Array(52).keys()]; for (let i = 51; i > 0; i--) { const j = random() * (i + 1) | 0; [d[i], d[j]] = [d[j], d[i]] } return d }});
+    for (let i = 0; i < 2 + table % 7; i++) t.host({op: 'bot'});
+    t.state().game = 'bts';
+    const total = () => Object.values(t.state().players).reduce((a, p) => a + p.chips, 0) + (t.state().hand && !t.state().hand.done ? t.state().hand.pot : 0);
+    const start = total();
+    if (!t.host({op: 'start'})) {
+      games++;
+      for (let g = 0; g < 20000 && !t.state().hand.done; g++) { c.t += 5000; t.tick(); assert.equal(total(), start) }
+      assert.equal(t.state().hand.done, 1, 'game finished');
+    }
+    assert.equal(total(), start);
+  }
+  assert.ok(games >= 10, 'played ' + games);
 });

@@ -27,6 +27,8 @@ If `HOST_KEY` isn't set, the server makes one up, saves it with the table and pr
 - **Texas Hold'em**: the dealer picks the big blind (10 or more, in steps of 10; small blind is half). All bets go up in steps of the big blind; all-in can be any amount.
 - **Screw Your Neighbor**: the dealer picks one ante (100 or more, in steps of 100). Everyone pays it once and gets 4 lives. One card each round; keep it or swap with the player on your left, and the dealer goes last and may swap with the deck. Aces are high and can't be taken (show yours, or let a swap reveal it). Everyone tied for lowest loses a life. The same dealer deals the whole game; the deck reshuffles between rounds when it runs low. The last player with lives takes the pot. If the last players all go out together, the pot carries over and players can ante again.
 
+- **Between the Sheets**: the dealer picks one ante (100 or more, in steps of 100). From the dealer's left (dealer last), round and round, each player gets two cards face up (Aces always high) and bets, in 100s up to the whole pot, that the next card lands between them, or passes for free. Between: win the bet from the pot. Outside: pay it in. Same value as either card (hitting the post): pay double, which can go below zero; a player below zero can't join a new game until they're back above it. Next-door cards or a pair: no bet, 10 second pause. The same dealer deals until someone takes the whole pot.
+
 Tap **📖** at the top for the full rules and tips for each game.
 
 New players are asked for their first name and last initial. Returning players tap their name from the saved list, which brings back their chips. Bots aren't saved.

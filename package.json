@@ -6,7 +6,7 @@
   "engines": { "node": ">=18" },
   "scripts": {
     "start": "node server.js",
-    "test": "node --test test/engine.test.js && node test/e2e.spec.mjs && node test/syn.spec.mjs",
+    "test": "node --test test/engine.test.js && node test/e2e.spec.mjs && node test/syn.spec.mjs && node test/bts.spec.mjs",
     "test:artifact": "node artifact/test/host.spec.mjs"
   },
   "dependencies": {
