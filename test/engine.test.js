@@ -428,3 +428,11 @@ test('Screw Your Neighbor: each player sees what they traded, and nobody else do
   t.player('C', {t: 'act', a: 'keep'}); t.player('A', {t: 'act', a: 'swap'});
   assert.deepEqual(t.view('A').hand.notes, [{k: 'deck', gave: C('9'), got: C('3')}]);
 });
+
+test('a Screw Your Neighbor game saved by an older version keeps working', () => {
+  const t = synTable(['A', 'B', 'C'], [C('2'), C('3'), C('9'), C('K'), C('5')]);
+  t.player('A', {t: 'deal'});
+  delete t.state().hand.notes;
+  t.player('B', {t: 'act', a: 'swap'});
+  assert.equal(t.view('B').hand.notes.length, 1);
+});

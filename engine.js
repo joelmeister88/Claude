@@ -219,7 +219,7 @@ function createTable(saved, {now = Date.now, random = Math.random, shuffle = cry
     if (H.turn !== i) return 'Not your turn';
     const al = alive(), k = al.indexOf(i);
     // what each player gave and got this round; only those two players ever see it
-    const note = (who, x) => (H.notes[who] = H.notes[who] || []).push(x);
+    const notes = H.notes = H.notes || {}, note = (who, x) => (notes[who] = notes[who] || []).push(x);
     if (a == 'swap' && k == al.length - 1) {
       const gave = H.cards[i]; H.cards[i] = H.d.pop(); delete H.shown[i]; H.msg = n + ' swaps with the deck';
       note(i, {k: 'deck', gave, got: H.cards[i]});

@@ -30,7 +30,9 @@ function persist() {
 }
 
 const table = createTable(saved.state, {onChange: () => { broadcast(); persist() }});
-setInterval(table.tick, 250);
+// one bad message or timer tick must never take the whole table down
+const safely = (what, f) => { try { return f() } catch (e) { console.error('Error in ' + what + ':', e) } };
+setInterval(() => safely('tick', table.tick), 250);
 
 // ---------- http ----------
 const server = http.createServer((req, res) => {
@@ -67,7 +69,7 @@ wss.on('connection', ws => {
   clients.add(c);
   ws.on('pong', () => c.alive = true);
   ws.on('close', () => { clients.delete(c); if (c.name) broadcast() });
-  ws.on('message', raw => {
+  ws.on('message', raw => safely('message', () => {
     if (++c.hits > 30) return; // more than 30 messages a second: drop
     let m; try { m = JSON.parse(raw) } catch (e) { return }
     if (!m || typeof m != 'object') return;
@@ -113,7 +115,7 @@ wss.on('connection', ws => {
     if (m.t == 'host') { if (!isHost(c)) return err('Only the host can do that'); const e = table.host(m); return e && err(e) }
     if (!c.name) return err('Enter your name first');
     const e = table.player(c.name, m); if (e) err(e);
-  });
+  }));
   sendState(c);
 });
 // drop dead connections, reset message budgets
