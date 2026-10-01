@@ -107,7 +107,7 @@ document.addEventListener('click',async e=>{const b=e.target.closest('[data-a]')
  try{AC=AC||new AudioContext();AC.resume()}catch(x){}
  if(a=='name'){const n=$('#nm').value.trim();if(n)send({t:'name',name:n})}
  else if(a=='rename'){me='';render()}
- else if(a=='share'){const ok=await copy('Join my poker table 🃏 '+LINK);b.textContent=ok?'✓ Copied':'Copy failed';if(!ok)note('Copy this link: '+LINK);setTimeout(()=>b.textContent='🔗 Share',1500)}
+ else if(a=='share'){const ok=await copy(LINK);b.textContent=ok?'✓ Copied':'Copy failed';if(!ok)note('Copy this link: '+LINK);setTimeout(()=>b.textContent='🔗 Share',1500)}
  else if(a=='snd'){snd=!snd;b.textContent=snd?'🔊':'🔈'}
  else if(a=='seat')send({t:'sit'});
  else if(a=='unsit')send({t:'unsit'});
