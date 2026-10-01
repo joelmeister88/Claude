@@ -34,7 +34,7 @@ function cryptoShuffle() {
   return d;
 }
 
-const fresh = () => ({players: {}, seats: Array(SEATS).fill(''), pend: {}, leave: {}, bust: {}, buy: {}, wait: 0,
+const fresh = () => ({players: {}, seats: Array(SEATS).fill(''), pend: {}, queue: [], leave: {}, bust: {}, buy: {}, wait: 0,
   hand: null, btn: -1, dealer: -1, dealDl: 0, sb: 5, bb: 10, game: 'holdem', n: 0, last: -1, known: {}});
 const int = v => { const x = Math.floor(+v); return Number.isFinite(x) ? x : NaN };
 // the dealer picks the big blind: at least 10, in steps of 10; the small blind is always half
@@ -48,13 +48,13 @@ function createTable(saved, {now = Date.now, random = Math.random, shuffle = cry
   const S = Object.assign(fresh(), saved || {});
   // a restart shouldn't time out whoever was mid-decision
   if (S.hand && !S.hand.done) S.hand.dl = now() + TURN;
-  S.dealDl = 0; delete S.pausedAt;
+  S.dealDl = 0; delete S.pausedAt; S.queue = S.queue || [];
   // name history: everyone who has played here, bots excluded
   for (const n in S.players) if (!S.players[n].bot && !S.known[n]) S.known[n] = 1;
   let botAt = 0;
 
   function changed() {
-    S.n++; tidy(); dealerUpkeep(); freezeUpkeep();
+    S.n++; tidy(); queueUpkeep(); dealerUpkeep(); freezeUpkeep();
     const H = S.hand, p = H && !H.done && S.players[S.seats[H.turn]];
     botAt = p && p.bot ? now() + BOT_DELAY : 0;
     // each new decision gets a fresh 30s turn clock (bots move on their own timer)
@@ -81,6 +81,10 @@ function createTable(saved, {now = Date.now, random = Math.random, shuffle = cry
     if (!canDeal()) S.dealDl = 0;
     else if (!S.dealDl) S.dealDl = Math.max(now(), S.wait) + DEAL;
   }
+  // ---------- waitlist: when every seat is taken or spoken for, people line up ----------
+  const openSeats = () => S.seats.filter(n => !n).length - Object.keys(S.pend).length;
+  // a seat opened up: the front of the line becomes a seat request for the host
+  function queueUpkeep() { while (S.queue.length && openSeats() > 0) S.pend[S.queue.shift()] = 1 }
   // ---------- frozen clocks: the host's Pause, or someone waiting for the host to seat them ----------
   const holdReason = () => S.paused ? 'host' : Object.keys(S.pend).length ? 'seats' : '';
   function freezeUpkeep() {
@@ -167,8 +171,12 @@ function createTable(saved, {now = Date.now, random = Math.random, shuffle = cry
   function player(n, m) {
     if (!S.players[n] && m.t != 'sit') return;
     const seated = S.seats.includes(n);
-    if (m.t == 'sit') { if (seated || S.pend[n]) return; S.players[n] = S.players[n] || {chips: 0}; S.pend[n] = 1 }
-    else if (m.t == 'unsit') delete S.pend[n];
+    if (m.t == 'sit') {
+      if (seated || S.pend[n] || S.queue.includes(n)) return;
+      S.players[n] = S.players[n] || {chips: 0};
+      if (openSeats() > 0) S.pend[n] = 1; else S.queue.push(n);
+    }
+    else if (m.t == 'unsit') { delete S.pend[n]; S.queue = S.queue.filter(x => x != n) }
     else if (m.t == 'stand') { if (!seated) return; standOrLeave(n) }
     else if (m.t == 'buy') { if (!seated) return; delete S.bust[n]; S.buy[n] = 1 }
     else if (m.t == 'deal') {
@@ -246,7 +254,7 @@ function createTable(saved, {now = Date.now, random = Math.random, shuffle = cry
   function forget(n) {
     if (!S.known[n] && !S.players[n]) return 'No such name';
     if (S.seats.includes(n) || S.pend[n]) return n + ' is at the table: stand them up first';
-    delete S.known[n]; delete S.players[n]; changed();
+    delete S.known[n]; delete S.players[n]; S.queue = S.queue.filter(x => x != n); changed();
   }
   /** Start over: no players, no chips, no history. */
   function reset() { for (const k of Object.keys(S)) delete S[k]; Object.assign(S, fresh()); botAt = 0; changed() }
@@ -261,7 +269,7 @@ function createTable(saved, {now = Date.now, random = Math.random, shuffle = cry
     const players = {}; for (const n in S.players) players[n] = {chips: S.players[n].chips, bot: !!S.players[n].bot};
     return {players, seats: S.seats, pend: S.pend, leave: S.leave, bust: S.bust, buy: S.buy, wait: S.wait, hand,
       btn: S.btn, dealer: S.dealer, dealDl: S.dealDl, sb: S.sb, bb: S.bb, game: S.game, gameName: GAMES[S.game].name, n: S.n,
-      paused: S.frozenAt || 0, hold: holdReason(),
+      queue: S.queue, paused: S.frozenAt || 0, hold: holdReason(),
       known: Object.keys(S.known).sort((a, b) => S.known[b] - S.known[a])};
   }
   return {state: () => S, view, player, host, tick, remember, forget, reset};

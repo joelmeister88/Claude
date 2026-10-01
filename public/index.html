@@ -89,10 +89,11 @@ function render(){const m=$('#main');
   const cards=ih&&!fo?'<br>'+H.h[i].map(c=>ch(H.show?c:null,'sm')).join(''):'';
   seats+=`<div class="st ${H&&!H.done&&H.turn==i?'t':''} ${fo?'f':''} ${i==my?'me':''}" style="left:${x}%;top:${y}%"><b>${(H&&!H.done?H.btn:S.dealer)==i?'<span class="d">D</span>':''}${n===S.hostName?'<span title="Host">👑</span>':''}${esc(n)}</b>${S.players[n].chips}${cards}${ih&&H.bet[i]?`<div class="bet"><i class="ch"></i>${H.bet[i]}</div>`:''}</div>`}
  const board=H?[0,1,2,3,4].map(k=>H.board[k]!=null?ch(H.board[k],'bd'):'<i class="c e bd"></i>').join(''):'';
+ const qi=(S.queue||[]).indexOf(me),full=S.seats.filter(n=>!n).length-Object.keys(S.pend).length<=0;
  const live=H&&!H.done,myDeal=!live&&my>=0&&S.dealer==my&&S.dealDl>0,dealer=S.seats[S.dealer];
  const who=`<b>${esc(me)}</b> <button data-a="rename" style="padding:2px 8px;font-size:12px">change</button>`;
  let me_='';
- if(my<0)me_=`${who} <span class="m">Saved chips: ${pl?pl.chips:0}</span><div class="row">${S.pend[me]?'<small>Seat requested, waiting for host…</small> <button data-a="unsit">Cancel</button>':'<button class="g" data-a="seat">Sit Down</button>'}</div>`;
+ if(my<0)me_=`${who} <span class="m">Saved chips: ${pl?pl.chips:0}</span><div class="row">${S.pend[me]?'<small>Seat requested, waiting for host…</small> <button data-a="unsit">Cancel</button>':qi>=0?`<b>You're #${qi+1} in line</b> <small>You'll get the next open seat.</small> <button data-a="unsit">Leave the line</button>`:full?'<button class="g" data-a="seat">Join the waitlist</button> <small>All 12 seats are taken.</small>':'<button class="g" data-a="seat">Sit Down</button>'}</div>`;
  else if(S.bust[me])me_=`<b>${esc(me)}</b> · <b>You're out of chips</b><div class="row"><button class="g" data-a="buy">Get more chips</button><button class="r" data-a="stand">Stand Up</button></div><small>Choose within <span data-cd="${S.bust[me]}"></span> or you'll stand up automatically.</small>`;
  else{me_=`<b>${esc(me)}</b> · ${pl.chips} chips`;
   if(inH){const pk=Date.now()<peekT;me_+=`<div class="row">${H.h[my].map(c=>ch(pk?c:null,'lg')).join('')}${pk?'<button data-a="hide">🙈 Hide now</button>':'<button data-a="peek">👁 Peek 3s</button>'}</div>`;
@@ -111,8 +112,8 @@ function render(){const m=$('#main');
  if(H&&H.done&&lastN!=S.n&&lastN>=0){[523,659,784].forEach((f,i)=>beep(f,.15,i*.12))}
  lastN=S.n;renderLobby();renderHost();renderAdmin();tick()}
 // people with chips who aren't sitting at the table
-function renderLobby(){const on=S.online||[],away=Object.keys(S.players).filter(n=>!S.players[n].bot&&!S.seats.includes(n)&&S.players[n].chips>0).sort();
- put($('#lobby'),`<div class="p"><small>👑 Host: <b>${esc(S.hostName||'nobody yet')}</b></small>${away.length?`<h4>Not at the table</h4>${away.map(n=>`<div class="row" style="margin-top:2px"><span style="flex:1">${esc(n)}${on.includes(n)?'<i class="dot" title="online"></i>':''}${S.pend[n]?' <small>(wants a seat)</small>':''}</span><b>${S.players[n].chips}</b></div>`).join('')}`:''}</div>`)}
+function renderLobby(){const on=S.online||[],q=S.queue||[],away=Object.keys(S.players).filter(n=>!S.players[n].bot&&!S.seats.includes(n)&&!q.includes(n)&&S.players[n].chips>0).sort();
+ put($('#lobby'),`<div class="p"><small>👑 Host: <b>${esc(S.hostName||'nobody yet')}</b></small>${q.length?`<h4>Waiting list</h4>${q.map((n,k)=>`<div class="row" style="margin-top:2px"><span style="flex:1">${k+1}. ${esc(n)}${on.includes(n)?'<i class="dot" title="online"></i>':''}${n===me?' <small>(you)</small>':''}</span></div>`).join('')}`:''}${away.length?`<h4>Not at the table</h4>${away.map(n=>`<div class="row" style="margin-top:2px"><span style="flex:1">${esc(n)}${on.includes(n)?'<i class="dot" title="online"></i>':''}${S.pend[n]?' <small>(wants a seat)</small>':''}</span><b>${S.players[n].chips}</b></div>`).join('')}`:''}</div>`)}
 function renderAdmin(){const e=$('#admin'),f=document.activeElement;if(f&&f.tagName=='INPUT'&&e.contains(f))return;
  if(!admin){put(e,showKey?`<div class="p"><b>Admin</b><div class="row"><input id="ak" type="password" placeholder="Password" style="flex:1" autocomplete="current-password"><button class="g" data-a="unlock">Unlock</button></div></div>`:'<div class="row" style="justify-content:center"><button class="lnk" data-a="showkey">Admin</button></div>');return}
  const names=(S.known||[]).map(n=>`<div class="row" style="margin-top:2px"><span style="flex:1">${esc(n)} ${S.players[n]?`<small>${S.players[n].chips} chips</small>`:''}</span><button data-a="forget" data-v="${esc(n)}" ${arm=='f:'+n?'class="r">Delete?':'>✕'}</button></div>`).join('');

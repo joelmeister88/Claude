@@ -166,6 +166,18 @@ await Y.p.click('button:text-is("Sit Down")'); await Y.p.click('[data-a=ok]');
 await Y.p.waitForSelector('.st.me');
 ok((await Y.p.textContent('.st.me')).includes('👑') && (await Y.p.textContent('#lobby')).includes('👑 Host: Pat'), 'crown marks the host at the table');
 
+// a full table: newcomers wait in line, then get the next open seat
+await Y.p.click('[data-a=pause]');
+for (let k = 0; k < 11; k++) await Y.p.click('text=+ Bot');
+await Y.p.waitForFunction(() => document.querySelectorAll('.st').length == 12);
+const Z = await player('Zoe');
+await Z.p.click('text=Join the waitlist');
+await Z.p.waitForSelector("text=You're #1 in line");
+ok((await Y.p.textContent('#lobby')).includes('1. Zoe'), 'everyone sees the waiting list');
+ok(await Z.p.$$eval('.st', e => e.length) == 12, 'people in line can watch the table');
+await Y.p.click('[data-a=rmbot][data-v="Bot 3"]');
+await Z.p.waitForSelector('text=Seat requested');
+ok(await Y.p.$eval('#host .p', e => e.classList.contains('turn')), 'an open seat goes to the front of the line, and the host is alerted');
 ok(!H.errs.length && !P.errs.length && !Y.errs.length, 'no page errors ' + H.errs.concat(P.errs, Y.errs).join('|'));
 await browser.close(); await stop();
 console.log(fails ? fails + ' failing' : 'all passed'); process.exit(fails ? 1 : 0);

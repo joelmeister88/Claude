@@ -233,3 +233,25 @@ test('a seat request freezes the clocks and holds the deal until the host answer
   t.player('Later', {t: 'sit'}); t.host({op: 'noseat', name: 'Later'});
   assert.equal(t.view('').hold, '', 'declining also releases the hold');
 });
+
+test('a full table has a waitlist; the front of the line gets the next open seat', () => {
+  const c = clock(), t = createTable(null, {now: c});
+  for (let i = 0; i < 11; i++) t.host({op: 'bot'});
+  t.player('Ann', {t: 'sit'}); t.host({op: 'seat', name: 'Ann'});
+  const s = t.state();
+  assert.ok(s.seats.every(Boolean), 'all 12 seats taken');
+  t.player('Ben', {t: 'sit'}); t.player('Cy', {t: 'sit'}); t.player('Di', {t: 'sit'});
+  assert.deepEqual(t.view('').queue, ['Ben', 'Cy', 'Di']);
+  assert.deepEqual(s.pend, {}, 'nobody can request a seat that does not exist');
+  assert.equal(t.view('').hold, '', 'a waitlist does not pause the game');
+  t.player('Cy', {t: 'unsit'});
+  assert.deepEqual(s.queue, ['Ben', 'Di'], 'leaving the line');
+  t.player('Ann', {t: 'stand'});
+  assert.deepEqual(Object.keys(s.pend), ['Ben'], 'front of the line becomes a seat request');
+  assert.deepEqual(s.queue, ['Di']);
+  assert.equal(t.view('').hold, 'seats', 'and the host is alerted');
+  t.host({op: 'noseat', name: 'Ben'});
+  assert.deepEqual(Object.keys(s.pend), ['Di'], 'declined: the next in line moves up');
+  t.host({op: 'seat', name: 'Di'});
+  assert.ok(s.seats.includes('Di') && !s.queue.length);
+});
