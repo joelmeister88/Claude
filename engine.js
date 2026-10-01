@@ -117,7 +117,8 @@ function createTable(saved, {now = Date.now, random = Math.random, shuffle = cry
   // a seat opened up: the front of the line becomes a seat request for the host
   function queueUpkeep() { while (S.queue.length && openSeats() > 0) S.pend[S.queue.shift()] = 1 }
   // ---------- frozen clocks: the host's Pause, or someone waiting for the host to seat them ----------
-  const holdReason = () => S.paused ? 'host' : Object.keys(S.pend).length ? 'seats' : '';
+  // a seat request only holds things up between games: mid-game, play carries on and they join the next one
+  const holdReason = () => S.paused ? 'host' : Object.keys(S.pend).length && !live() ? 'seats' : '';
   function freezeUpkeep() {
     const want = !!holdReason();
     if (want && !S.frozenAt) S.frozenAt = now();

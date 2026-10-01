@@ -625,3 +625,21 @@ test('the host can cancel a game, or undo the last one: chips go back to how the
   assert.match(s.hand.msg, /undid the last game/);
   assert.deepEqual([s.players.A.chips, s.players.B.chips, s.players.C.chips], [1000, 1000, 1250]);
 });
+
+test("someone asking for a seat mid-game doesn't pause it; they join the next game", () => {
+  const c = clock();
+  // B: 7 and 8, next door: 10 second pause
+  const t = btsTable(['A', 'B', 'C'], [C('K'), C('2'), C('8'), C('7')], c);
+  t.player('A', {t: 'deal'});
+  const s = t.state(), H = s.hand;
+  assert.equal(H.stage, 'skip');
+  t.player('Late', {t: 'sit'});
+  assert.equal(t.view('').hold, '', 'no pause mid-game');
+  c.t += 10000; t.tick();
+  assert.equal(s.seats[H.turn], 'C', 'the 10 second pause is still 10 seconds');
+  t.host({op: 'seat', name: 'Late'});
+  assert.ok(s.seats.includes('Late') && !H.ps.includes(s.seats.indexOf('Late')), 'seated, but not in this game');
+  t.player('Later', {t: 'sit'});
+  H.pot = 0; t.host({op: 'cancel'});
+  assert.equal(t.view('').hold, 'seats', 'between games, a seat request pauses the clocks again');
+});
