@@ -436,3 +436,31 @@ test('a Screw Your Neighbor game saved by an older version keeps working', () =>
   t.player('B', {t: 'act', a: 'swap'});
   assert.equal(t.view('B').hand.notes.length, 1);
 });
+
+test("nobody can bet more than they have", () => {
+  const c = clock(), t = createTable(null, {now: c});
+  for (const n of ['A', 'B', 'C']) { t.player(n, {t: 'sit'}); t.host({op: 'seat', name: n}) }
+  const s = t.state(); s.players.B.chips = 15; s.players.C.chips = 250;
+  t.player('A', {t: 'deal', bb: 30});
+  const H = s.hand;
+  assert.equal(s.players.B.chips, 0); assert.equal(H.bet[1], 15, "a blind you can't cover puts you all-in for what you have");
+  // A acts first (3-handed: A dealer, B small, C big, A first)
+  t.player('A', {t: 'act', a: 'raise', amt: 999999});
+  assert.equal(H.bet[0], 1000); assert.equal(s.players.A.chips, 0, 'a raise beyond your stack is all-in');
+  t.player('C', {t: 'act', a: 'call'});
+  assert.equal(H.tot[2], 250, 'calling more than you have is all-in for what you have');
+  assert.equal(H.done, 1, 'everyone all-in: the board runs out');
+  for (const n in s.players) assert.ok(s.players[n].chips >= 0);
+  assert.equal(Object.values(s.players).reduce((a, p) => a + p.chips, 0), 1000 + 15 + 250, 'no chips created or lost');
+});
+
+test('odd raise amounts (negative, text, fractions) never take more than you have', () => {
+  for (const amt of [-500, 'lots', 33.7, 1e300, null]) {
+    const t = createTable(null, {now: clock()});
+    for (const n of ['A', 'B']) { t.player(n, {t: 'sit'}); t.host({op: 'seat', name: n}) }
+    t.player('A', {t: 'deal'});
+    const s = t.state(), n = s.seats[s.hand.turn];
+    t.player(n, {t: 'act', a: 'raise', amt});
+    for (const x in s.players) assert.ok(s.players[x].chips >= 0 && Number.isInteger(s.players[x].chips), String(amt));
+  }
+});
