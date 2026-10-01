@@ -1,0 +1,12 @@
+# Render Blueprint: New > Blueprint, pick this repo.
+services:
+  - type: web
+    name: poker-night
+    runtime: node
+    plan: free
+    buildCommand: npm ci --omit=dev
+    startCommand: node server.js
+    healthCheckPath: /healthz
+    envVars:
+      - key: HOST_KEY
+        generateValue: true

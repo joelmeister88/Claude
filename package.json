@@ -1,6 +1,18 @@
 {
   "name": "poker-night",
   "private": true,
-  "scripts": { "test": "node test/host.spec.mjs" },
-  "devDependencies": { "playwright": "1.56.1" }
+  "description": "Texas Hold'em for friends: one link, phones, virtual chips",
+  "main": "server.js",
+  "engines": { "node": ">=18" },
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test test/engine.test.js && node test/e2e.spec.mjs",
+    "test:artifact": "node artifact/test/host.spec.mjs"
+  },
+  "dependencies": {
+    "ws": "^8.22.0"
+  },
+  "devDependencies": {
+    "playwright": "1.56.1"
+  }
 }
