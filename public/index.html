@@ -26,18 +26,19 @@ button{cursor:pointer;font-weight:600;min-height:44px}input{width:90px;font-size
 .ch{display:inline-block;width:13px;height:13px;border-radius:50%;border:3px dashed #fff;background:#c0392b;vertical-align:middle;margin-right:2px}
 .d{display:inline-block;background:#ffd54a;color:#000;border:1.5px solid #fff;border-radius:50%;width:17px;height:17px;font-size:11px;line-height:14px;font-weight:800;text-align:center;margin-right:2px;box-shadow:0 0 4px #000}
 .names{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}.dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#2ecc71;margin-left:4px;vertical-align:middle}
+.game{display:block;width:100%;text-align:left;margin-top:8px;padding:10px 12px;font-weight:400}.game b{font-size:17px}.game.cur{border:2px solid #0b6b3a}
 .lnk{background:none;border:0;padding:4px;min-height:0;opacity:.6;font-weight:400;text-decoration:underline}
 .row{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:6px}.g{background:#0b6b3a;color:#fff;border-color:#0b6b3a}.r{background:#b3261e;color:#fff;border-color:#b3261e}
 .act button{flex:1 1 auto;white-space:nowrap;padding:8px 10px}.act input{flex:1 1 64px;width:64px}
 .clock{font-weight:700;color:var(--turnbd)}
 small,.m{opacity:.7}h4{margin:8px 0 2px}
 </style></head><body>
-<div class="top"><b>🃏 Poker Night</b><span><button id="sh" data-a="share">🔗 Share</button> <button id="snd" data-a="snd">🔊</button></span></div>
+<div class="top"><b id="gt" style="font-size:18px">🃏 Poker Night</b><span><button id="sh" data-a="share">🔗 Share</button> <button id="snd" data-a="snd">🔊</button></span></div>
 <div id="conn" class="p" hidden>Connecting…</div><div id="note" class="p" hidden></div><div id="main"></div><div id="lobby"></div><div id="host"></div><div id="admin"></div>
 <script>
 'use strict';
 const $=s=>document.querySelector(s),SU='♠♥♦♣',RK='  23456789TJQKA';
-let ws,S=null,me='',token='',hostKey='',host=false,admin=false,renaming=false,showKey=false,arm='',dbb=0,lastPend=0,lastDeal=0,off=0,rt=0,peekT=0,snd=true,AC,lastN=-1,addAmt={},adjFor='',noteT,retry=0;
+let ws,S=null,me='',token='',hostKey='',host=false,admin=false,renaming=false,showKey=false,arm='',dbb=0,picking=false,lastPend=0,lastDeal=0,off=0,rt=0,peekT=0,snd=true,AC,lastN=-1,addAmt={},adjFor='',noteT,retry=0;
 try{token=localStorage.getItem('pn_token')||'';hostKey=localStorage.getItem('pn_host')||''}catch(e){}
 // the admin link is /#host=KEY: remember the key on this device, then drop it from the address bar
 {const m=location.hash.match(/host=([^&]+)/);if(m){try{hostKey=decodeURIComponent(m[1])}catch(e){hostKey=m[1]}try{localStorage.setItem('pn_host',hostKey)}catch(e){}history.replaceState(null,'',location.pathname)}}
@@ -79,6 +80,7 @@ setInterval(tick,250);
 const owed=()=>S.seats.filter(n=>n&&S.players[n].chips<=0);
 function render(){const m=$('#main');
  if(!S){put(m,'<div class="p">Connecting to the table…</div>');return}
+ $('#gt').textContent='🃏 '+S.gameName;
  if(!me||renaming){const on=S.online||[],k=S.known.map(n=>on.includes(n)&&n!==me?`<button disabled>${esc(n)} <small>(here)</small></button>`:`<button data-a="pick" data-v="${esc(n)}">${esc(n)}${S.players[n]?` <small>· ${S.players[n].chips}</small>`:''}</button>`).join('');
   put(m,`<div class="p">${k?`<b>Who are you?</b><div class="names">${k}</div><h4>New here?</h4>`:'<b>Your name</b>'}<small>First name and last initial, like “Joel L”</small><div class="row"><input id="nm" maxlength="12" placeholder="First name + initial" style="flex:1" autocomplete="nickname"><button class="g" data-a="name">Join</button>${renaming?'<button data-a="unrename">Cancel</button>':''}</div></div>`);
   put($('#lobby'),'');renderHost();renderAdmin();return}
@@ -102,9 +104,11 @@ function render(){const m=$('#main');
     if(pl.chips>need)me_+=`<div class="row act"><input id="rt" type="number" inputmode="numeric" value="${rt}"><button class="g" data-a="raise">${H.cur?'Raise to':'Bet'}</button><button data-a="q" data-v="${mn}">Min</button><button data-a="q" data-v="${H.cur+Math.floor(pot/2)}">½ Pot</button><button data-a="q" data-v="${H.cur+pot}">Pot</button></div>`}
    else if(!H.done)me_+=`<div class="m">Waiting for ${esc(S.seats[H.turn])}… <span data-cd="${H.dl||0}"></span></div>`}
   else if(H&&!H.done)me_+=`<div class="m">You're sitting out this hand.</div>`;
-  if(myDeal)me_+=`<div class="row"><b>You're the dealer</b> <span class="clock" data-cd="${S.dealDl}"></span></div><div class="row act"><span>Blind</span><button data-a="bbdn" aria-label="Lower blind">−</button><input id="dbb" type="number" inputmode="numeric" min="10" step="10" value="${dbb||S.bb}"><button data-a="bbup" aria-label="Raise blind">+</button></div><div class="row act"><small id="sbl" style="flex:1">Small blind ${(dbb||S.bb)/2}</small><button class="g" data-a="deal" data-until="${S.wait||0}">Deal</button></div><small>Deal within the time or the deal passes to your left.</small>`;
+  if(myDeal)me_+=`<div class="row"><b>You're the dealer</b> <span class="clock" data-cd="${S.dealDl}"></span></div><div class="row"><button data-a="pickgame">🎲 Change game</button><small>Now: ${esc(S.gameName)}</small></div><div class="row act"><span>Blind</span><button data-a="bbdn" aria-label="Lower blind">−</button><input id="dbb" type="number" inputmode="numeric" min="10" step="10" value="${dbb||S.bb}"><button data-a="bbup" aria-label="Raise blind">+</button></div><div class="row act"><small id="sbl" style="flex:1">Small blind ${(dbb||S.bb)/2}</small><button class="g" data-a="deal" data-until="${S.wait||0}">Deal</button></div><small>Deal within the time or the deal passes to your left.</small>`;
   me_+=`<div class="row">${S.leave[me]?'<small>Standing up when this hand ends…</small>':`<button class="r" data-a="stand">Stand Up</button>`}${S.buy[me]?'<small>Chip request sent, waiting for host…</small>':'<button data-a="buy">Get more chips</button>'}</div>`;
   if(inH&&!H.done&&!S.leave[me])me_+='<small>Standing up mid-hand folds your cards.</small>'}
+ if(picking&&myDeal){put(m,`<div class="p turn"><div class="row"><b style="flex:1">Choose the game</b><span class="clock" data-cd="${S.dealDl}"></span></div><small>You're the dealer. Pick what everyone plays next.</small>${S.games.map(g=>`<button class="game ${g.id==S.game?'cur':''}" data-a="setgame" data-v="${g.id}" ${g.ready?'':'disabled'}><b>${esc(g.name)}</b>${g.id==S.game?' <small>· now playing</small>':''}<br><small>${esc(g.blurb)}</small></button>`).join('')}<div class="row"><button data-a="unpick">Back</button></div></div>`);lastN=S.n;renderLobby();renderHost();renderAdmin();tick();return}
+ if(!myDeal)picking=false;
  const f=document.activeElement;
  if(!(myDeal&&f&&f.id=='dbb'))put(m,`<div class="tbl" style="aspect-ratio:${N<=3?'1/1':N<=7?'6/7':'4/5'}">${seats}<div class="mid">${board}</div><div class="info"><div style="font-size:16px"><i class="ch"></i><b>Pot ${pot}</b></div><div style="font-size:12px">${S.hold=='host'?'<b style="color:#ffd54a">⏸ Paused by the host</b><br>':S.hold=='seats'?`<b style="color:#ffd54a">⏸ Waiting for the host to seat ${esc(Object.keys(S.pend).join(', '))}</b><br>`:''}${H?esc(H.msg):''}${!live&&S.dealDl&&dealer?`<br><span class="d">D</span>${esc(dealer)} deals next <span data-cd="${S.dealDl}"></span>`:!live&&!S.dealDl?'<br>Waiting for players':''}</div></div></div><div class="p ${(live&&H.turn==my&&my>=0)||myDeal?'turn':''}">${me_}</div>`);
  if(myDeal&&lastDeal!==S.dealDl){beep(523,.12);navigator.vibrate&&navigator.vibrate(120)}lastDeal=myDeal?S.dealDl:0;
@@ -135,6 +139,9 @@ document.addEventListener('click',async e=>{const b=e.target.closest('[data-a]')
  else if(a=='rename'){renaming=true;render()}
  else if(a=='unrename'){renaming=false;render()}
  else if(a=='deal'){setBB($('#dbb').value);send({t:'deal',bb:dbb});dbb=0}
+ else if(a=='pickgame'){picking=true;render()}
+ else if(a=='unpick'){picking=false;render()}
+ else if(a=='setgame'){send({t:'game',game:v});picking=false;render()}
  else if(a=='bbup')setBB(+$('#dbb').value+10);
  else if(a=='bbdn')setBB(+$('#dbb').value-10);
  else if(a=='showkey'){showKey=true;renderAdmin();$('#ak').focus()}

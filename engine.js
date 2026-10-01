@@ -4,7 +4,11 @@
 // includes the deck or anyone else's hole cards.
 const crypto = require('crypto');
 
-const GAMES = {holdem: {name: "Texas Hold'em", hole: 2}};
+// Dealer's choice: the dealer picks the game between hands. Games list in this order.
+const GAMES = {
+  holdem: {name: "Texas Hold'em", hole: 2, ready: true, blurb: 'Two hole cards, five on the board. Best five-card hand wins.'},
+  syn: {name: 'Screw Your Neighbor', ready: false, blurb: 'One card each. Keep it or swap left; lowest card loses. Coming soon.'},
+};
 const HN = ['High card', 'Pair', 'Two pair', 'Trips', 'Straight', 'Flush', 'Full house', 'Quads', 'Straight flush'];
 const WAIT = 10000, BUST = 30000, TURN = 30000, DEAL = 30000, MISSES = 3, BOT_DELAY = 1300, SEATS = 12;
 
@@ -185,6 +189,11 @@ function createTable(saved, {now = Date.now, random = Math.random, shuffle = cry
       const keep = [S.sb, S.bb]; S.sb = bb / 2; S.bb = bb;
       const e = startHand(); if (e) { [S.sb, S.bb] = keep; return e }
     }
+    else if (m.t == 'game') {
+      if (S.seats[S.dealer] !== n || live()) return "Only the dealer can change the game, between hands";
+      const g = GAMES[m.game]; if (!g || !g.ready) return "That game isn't available yet";
+      S.game = m.game;
+    }
     else if (m.t == 'act') { if (!live() || S.seats[S.hand.turn] !== n) return 'Not your turn'; S.players[n].miss = 0; act(n, m.a, m.amt) }
     else return;
     changed();
@@ -268,7 +277,8 @@ function createTable(saved, {now = Date.now, random = Math.random, shuffle = cry
     }
     const players = {}; for (const n in S.players) players[n] = {chips: S.players[n].chips, bot: !!S.players[n].bot};
     return {players, seats: S.seats, pend: S.pend, leave: S.leave, bust: S.bust, buy: S.buy, wait: S.wait, hand,
-      btn: S.btn, dealer: S.dealer, dealDl: S.dealDl, sb: S.sb, bb: S.bb, game: S.game, gameName: GAMES[S.game].name, n: S.n,
+      btn: S.btn, dealer: S.dealer, dealDl: S.dealDl, sb: S.sb, bb: S.bb, game: S.game, gameName: GAMES[S.game].name,
+      games: Object.entries(GAMES).map(([id, g]) => ({id, name: g.name, blurb: g.blurb, ready: !!g.ready})), n: S.n,
       queue: S.queue, paused: S.frozenAt || 0, hold: holdReason(),
       known: Object.keys(S.known).sort((a, b) => S.known[b] - S.known[a])};
   }

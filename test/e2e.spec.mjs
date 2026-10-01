@@ -89,6 +89,12 @@ if (await P.p.$('[data-a=fold]')) { await checkTurn(); await P.p.click('[data-a=
 await P.p.waitForSelector("text=You're the dealer");
 ok(await P.p.isDisabled('[data-a=deal]') && /Deal in \d+s/.test(await P.p.textContent('[data-a=deal]')), 'dealer waits out the 10s pause');
 ok((await H.p.textContent('#main')).includes('Pat deals next'), 'everyone sees who deals next');
+ok((await P.p.textContent('#gt')).includes("Texas Hold'em"), 'game name is shown at the top');
+await P.p.click('text=Change game');
+const games = await P.p.$$eval('[data-a=setgame]', b => b.map(x => [x.textContent, x.disabled]));
+ok(games[0][0].includes("Texas Hold'em") && games[1][0].includes('Screw Your Neighbor') && games[1][1], "game list: Hold'em first, Screw Your Neighbor coming soon");
+await P.p.click('[data-a=setgame][data-v=holdem]');
+await P.p.waitForSelector('#dbb');
 await P.p.fill('#dbb', '37'); await P.p.click('#sbl');
 ok(await P.p.inputValue('#dbb') == '40' && (await P.p.textContent('#sbl')).includes('20'), 'typed blind snaps to steps of 10; small blind is half');
 await P.p.fill('#dbb', '3'); await P.p.click('#sbl');

@@ -255,3 +255,17 @@ test('a full table has a waitlist; the front of the line gets the next open seat
   t.host({op: 'seat', name: 'Di'});
   assert.ok(s.seats.includes('Di') && !s.queue.length);
 });
+
+test("dealer's choice: only the dealer changes the game, between hands, to a ready game", () => {
+  const c = clock(), t = createTable(null, {now: c});
+  for (const n of ['A', 'B']) { t.player(n, {t: 'sit'}); t.host({op: 'seat', name: n}) }
+  const v = t.view('');
+  assert.deepEqual(v.games.map(g => g.id), ['holdem', 'syn'], "Hold'em is listed first");
+  assert.equal(v.gameName, "Texas Hold'em");
+  assert.match(t.player('B', {t: 'game', game: 'holdem'}), /Only the dealer/);
+  assert.match(t.player('A', {t: 'game', game: 'syn'}), /isn't available yet/);
+  assert.match(t.player('A', {t: 'game', game: 'nope'}), /isn't available yet/);
+  assert.equal(t.player('A', {t: 'game', game: 'holdem'}), undefined);
+  t.player('A', {t: 'deal'});
+  assert.match(t.player('A', {t: 'game', game: 'holdem'}), /between hands/);
+});
