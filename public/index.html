@@ -29,7 +29,7 @@ const $=s=>document.querySelector(s),SU='♠♥♦♣',RK='  23456789TJQKA';
 let ws,S=null,me='',token='',hostKey='',host=false,off=0,rt=0,peekT=0,snd=true,AC,lastN=-1,addAmt={},adjFor='',noteT,retry=0;
 try{token=localStorage.getItem('pn_token')||'';hostKey=localStorage.getItem('pn_host')||''}catch(e){}
 // the host link is /#host=KEY: remember the key on this device, then drop it from the address bar
-{const m=location.hash.match(/host=([\w-]+)/);if(m){hostKey=m[1];try{localStorage.setItem('pn_host',hostKey)}catch(e){}history.replaceState(null,'',location.pathname)}}
+{const m=location.hash.match(/host=([^&]+)/);if(m){try{hostKey=decodeURIComponent(m[1])}catch(e){hostKey=m[1]}try{localStorage.setItem('pn_host',hostKey)}catch(e){}history.replaceState(null,'',location.pathname)}}
 const LINK=location.origin+'/';
 const esc=s=>String(s).replace(/[&<>"']/g,c=>'&#'+c.charCodeAt(0)+';');
 function note(t){const e=$('#note');e.textContent=t;e.hidden=!t;clearTimeout(noteT);if(t)noteT=setTimeout(()=>e.hidden=true,4000)}

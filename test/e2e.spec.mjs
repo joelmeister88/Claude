@@ -5,7 +5,7 @@ import {mkdtempSync} from 'fs';
 import {tmpdir} from 'os';
 import {join} from 'path';
 const root = new URL('..', import.meta.url).pathname, data = join(mkdtempSync(join(tmpdir(), 'poker-')), 'table.json');
-const PORT = 3000 + Math.floor(Math.random() * 1000), URL_ = `http://localhost:${PORT}/`, KEY = 'test-host-key';
+const PORT = 3000 + Math.floor(Math.random() * 1000), URL_ = `http://localhost:${PORT}/`, KEY = 'K+Kj/SW=x9';
 let fails = 0; const ok = (c, m) => { console.log((c ? 'PASS ' : 'FAIL ') + m); if (!c) fails++ };
 let srv;
 async function start() {
