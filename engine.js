@@ -39,8 +39,10 @@ function cryptoShuffle() {
   return d;
 }
 
+// our regulars, offered on the name screen from the start (deleting one in the admin panel sticks)
+const DEFAULT_NAMES = ['Joel', 'Jesi', 'Paul', 'Kate', 'Branson', 'Shane', 'Darrin', 'Jennifer', 'Mitchell', 'Shay', 'Sam', 'Kelli', 'Jason'];
 const fresh = () => ({players: {}, seats: Array(SEATS).fill(''), pend: {}, queue: [], leave: {}, bust: {}, buy: {}, wait: 0,
-  hand: null, btn: -1, dealer: -1, dealDl: 0, sb: 5, bb: 10, ante: 100, game: 'holdem', n: 0, last: -1, known: {}});
+  hand: null, btn: -1, dealer: -1, dealDl: 0, sb: 5, bb: 10, ante: 100, game: 'holdem', n: 0, last: -1, known: {}, forgot: {}});
 const int = v => { const x = Math.floor(+v); return Number.isFinite(x) ? x : NaN };
 // the dealer picks the big blind: at least 10, in steps of 10; the small blind is always half
 const blindError = bb => bb >= 10 && bb % 10 == 0 ? '' : 'Blind must be 10 or more, in steps of 10';
@@ -59,6 +61,8 @@ function createTable(saved, {now = Date.now, random = Math.random, shuffle = cry
   S.dealDl = 0; delete S.pausedAt; S.queue = S.queue || []; S.ante = S.ante || 100;
   // name history: everyone who has played here, bots excluded
   for (const n in S.players) if (!S.players[n].bot && !S.known[n]) S.known[n] = 1;
+  S.forgot = S.forgot || {};
+  seedNames();
   let botAt = 0, botDealAt = 0;
 
   function changed() {
@@ -474,15 +478,17 @@ function createTable(saved, {now = Date.now, random = Math.random, shuffle = cry
     if (ch) changed();
   }
   /** Add a person's name to the history. */
-  function remember(n) { if (!S.known[n] || S.known[n] < now() - 60000) { S.known[n] = now(); changed() } }
+  function remember(n) { delete S.forgot[n]; if (!S.known[n] || S.known[n] < now() - 60000) { S.known[n] = now(); changed() } }
   /** Delete a name from the history, with its saved chips. Returns an error message, or undefined. */
+  // default names go after everyone who has actually played (they sort as 'never seen')
+  function seedNames() { for (const n of DEFAULT_NAMES) if (!(n in S.known) && !S.forgot[n]) S.known[n] = 0 }
   function forget(n) {
-    if (!S.known[n] && !S.players[n]) return 'No such name';
     if (S.seats.includes(n) || S.pend[n]) return n + ' is at the table: stand them up first';
-    delete S.known[n]; delete S.players[n]; S.queue = S.queue.filter(x => x != n); changed();
+    if (!(n in S.known) && !S.players[n]) return 'No such name';
+    delete S.known[n]; delete S.players[n]; S.forgot[n] = 1; S.queue = S.queue.filter(x => x != n); changed();
   }
   /** Start over: no players, no chips, no history. */
-  function reset() { for (const k of Object.keys(S)) delete S[k]; Object.assign(S, fresh()); botAt = 0; changed() }
+  function reset() { for (const k of Object.keys(S)) delete S[k]; Object.assign(S, fresh()); seedNames(); botAt = 0; changed() }
   /** What one viewer may see: no deck, and hole cards only for themselves (and live hands at showdown). */
   function view(name) {
     const H = S.hand; let hand = null;

@@ -182,10 +182,10 @@ const R = await player('Rae'); await R.p.waitForSelector('button:text-is("Sit Do
 await R.p.click('text=Peek').catch(() => {});
 await Y.p.click('text=Reset table'); await Y.p.click('text=Tap again to erase everything');
 await R.p.waitForSelector('#nm');
-ok(!(await R.p.$('button[data-a=pick]')) && !(await R.p.evaluate(() => localStorage.getItem('pn_token'))), 'reset starts every other phone over too');
+ok(!(await R.p.$('button[data-a=pick][data-v="Rae"]')) && await R.p.$('button[data-a=pick][data-v="Joel"]') && !(await R.p.evaluate(() => localStorage.getItem('pn_token'))), 'reset starts every other phone over too');
 await Y.p.waitForSelector('#nm');
 const s = Y.last().s;
-ok(!s.known.length && !Object.keys(s.players).length && !s.hostName, 'reset clears players, chips, names and host');
+ok(!s.known.includes('Pat') && s.known.includes('Joel') && !Object.keys(s.players).length && !s.hostName, 'reset clears players, chips, names and host (the regulars stay on the list)');
 await Y.p.fill('#nm', 'Pat'); await Y.p.click('text=Join');
 await Y.p.waitForSelector('text=+ Bot');
 ok(true, 'after a reset the first person in is host again');

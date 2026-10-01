@@ -189,16 +189,19 @@ test('a bot dealer deals by itself when a person is playing', () => {
 });
 
 test('name history: remembers people (not bots), forget and reset', () => {
+  const D = ['Joel', 'Jesi', 'Paul', 'Kate', 'Branson', 'Shane', 'Darrin', 'Jennifer', 'Mitchell', 'Shay', 'Sam', 'Kelli', 'Jason'];
   const c = clock(), t = createTable({players: {Old: {chips: 300}, 'Bot 1': {chips: 5, bot: 1}}}, {now: c});
-  assert.deepEqual(t.view('').known, ['Old']);
-  t.remember('Pat'); c.t += 1; t.remember('Sam');
-  assert.deepEqual(t.view('').known, ['Sam', 'Pat', 'Old'], 'most recent first');
+  assert.deepEqual(t.view('').known, ['Old', ...D], 'our regulars are offered from the start');
+  t.remember('Pat'); c.t += 1; t.remember('Kate');
+  assert.deepEqual(t.view('').known.slice(0, 3), ['Kate', 'Pat', 'Old'], 'most recent first');
   t.player('Pat', {t: 'sit'});
   assert.match(t.forget('Pat'), /at the table/);
-  assert.equal(t.forget('Old'), undefined);
-  assert.ok(!t.state().players.Old && !t.view('').known.includes('Old'));
+  assert.equal(t.forget('Old'), undefined); assert.equal(t.forget('Jason'), undefined);
+  assert.ok(!t.state().players.Old && !t.view('').known.includes('Old') && !t.view('').known.includes('Jason'));
+  const again = createTable(JSON.parse(JSON.stringify(t.state())), {now: c});
+  assert.ok(!again.view('').known.includes('Jason'), 'a deleted default name stays deleted after a restart');
   t.reset();
-  assert.deepEqual(t.view('').known, []); assert.deepEqual(t.state().players, {}); assert.ok(t.state().seats.every(x => !x));
+  assert.deepEqual(t.view('').known, D, 'reset: just the regulars'); assert.deepEqual(t.state().players, {}); assert.ok(t.state().seats.every(x => !x));
 });
 
 test('host pause freezes every clock and resume pushes deadlines back', () => {
