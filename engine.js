@@ -10,7 +10,7 @@ const GAMES = {
   syn: {name: 'Screw Your Neighbor', ready: true, blurb: 'One card each: keep it or swap left. Lowest card loses a life; last one standing takes the pot.'},
 };
 const HN = ['High card', 'Pair', 'Two pair', 'Trips', 'Straight', 'Flush', 'Full house', 'Quads', 'Straight flush'];
-const LIVES = 4, REVEAL = 5000, AGAIN = 30000, WAIT = 10000, BUST = 30000, TURN = 30000, DEAL = 30000, MISSES = 3, BOT_DELAY = 1300, SEATS = 12;
+const LIVES = 4, REVEAL = 5000, AGAIN = 30000, WAIT = 10000, BUST = 30000, TURN = 30000, DEAL = 120000, MISSES = 3, BOT_DELAY = 1300, SEATS = 12;
 
 // ---------- hand evaluation (cards are 0..51: rank c%13, 0='2'..12='A'; suit c/13) ----------
 function s5(c) {
@@ -85,7 +85,7 @@ function createTable(saved, {now = Date.now, random = Math.random, shuffle = cry
   const eligible = i => { const n = S.seats[i]; return !!n && S.players[n].chips > 0 && !S.leave[n] };
   function nextEligible(from) { for (let k = 1; k <= SEATS; k++) { const i = (from + k + SEATS) % SEATS; if (eligible(i)) return i } return -1 }
   const canDeal = () => !live() && !S.again && !owed().length && S.seats.filter((n, i) => eligible(i)).length >= 2;
-  // keep `dealer` on a seat that can deal, and run its 30s clock once dealing is possible (after the 10s pause)
+  // keep `dealer` on a seat that can deal, and run its 2-minute clock once dealing is possible (after the 10s pause)
   function dealerUpkeep() {
     if (live()) { S.dealDl = 0; return }
     if (S.dealer < 0 || !eligible(S.dealer)) { S.dealer = nextEligible(S.dealer >= 0 ? S.dealer : S.btn); S.dealDl = 0 }
@@ -208,7 +208,7 @@ function createTable(saved, {now = Date.now, random = Math.random, shuffle = cry
     const H = S.hand, al = alive();
     // not enough cards left to deal everyone (plus one for a swap with the deck): fresh shuffled deck
     const re = H.d.length < al.length + 1; if (re) H.d = shuffle();
-    H.cards = {}; H.shown = {}; H.low = []; H.stage = 'play'; H.round++; H.nextAt = 0;
+    H.cards = {}; H.shown = {}; H.low = []; H.notes = {}; H.stage = 'play'; H.round++; H.nextAt = 0;
     al.forEach(i => { H.cards[i] = H.d.pop(); if (S.players[S.seats[i]].bot && rank(H.cards[i]) == ACE && random() < .5) H.shown[i] = 1 });
     H.turn = al[0]; H.msg = 'Round ' + H.round + (re ? ' · deck reshuffled' : '');
   }
@@ -218,11 +218,20 @@ function createTable(saved, {now = Date.now, random = Math.random, shuffle = cry
     if (a == 'show') { if (rank(H.cards[i]) == ACE) { H.shown[i] = 1; H.msg = n + ' shows an Ace' } return }
     if (H.turn !== i) return 'Not your turn';
     const al = alive(), k = al.indexOf(i);
-    if (a == 'swap' && k == al.length - 1) { H.cards[i] = H.d.pop(); delete H.shown[i]; H.msg = n + ' swaps with the deck' }
+    // what each player gave and got this round; only those two players ever see it
+    const note = (who, x) => (H.notes[who] = H.notes[who] || []).push(x);
+    if (a == 'swap' && k == al.length - 1) {
+      const gave = H.cards[i]; H.cards[i] = H.d.pop(); delete H.shown[i]; H.msg = n + ' swaps with the deck';
+      note(i, {k: 'deck', gave, got: H.cards[i]});
+    }
     else if (a == 'swap') {
       const j = al[k + 1], m = S.seats[j];
-      if (rank(H.cards[j]) == ACE) { H.shown[j] = 1; H.msg = n + ' tried to swap with ' + m + ', who has an Ace!' }
+      if (rank(H.cards[j]) == ACE) {
+        H.shown[j] = 1; H.msg = n + ' tried to swap with ' + m + ', who has an Ace!';
+        note(i, {k: 'blocked', to: m}); note(j, {k: 'kept', from: n});
+      }
       else {
+        note(i, {k: 'gave', to: m, gave: H.cards[i], got: H.cards[j]}); note(j, {k: 'took', from: n, gave: H.cards[j], got: H.cards[i]});
         [H.cards[i], H.cards[j]] = [H.cards[j], H.cards[i]]; H.msg = n + ' swaps with ' + m;
         if (H.shown[i]) { delete H.shown[i]; H.shown[j] = 1 } // a shown Ace stays face up
       }
@@ -387,7 +396,7 @@ function createTable(saved, {now = Date.now, random = Math.random, shuffle = cry
       const my = name ? S.seats.indexOf(name) : -1, cards = {};
       for (const i in H.cards) cards[i] = +i === my || H.shown[i] || H.stage == 'reveal' ? H.cards[i] : null;
       const al = H.done ? [] : alive(), k = al.indexOf(H.turn);
-      const {d, ...rest} = H; hand = {...rest, cards, deckN: d.length, nb: k < 0 ? -1 : k < al.length - 1 ? al[k + 1] : -1};
+      const {d, notes, ...rest} = H; hand = {...rest, cards, notes: (notes || {})[my] || [], deckN: d.length, nb: k < 0 ? -1 : k < al.length - 1 ? al[k + 1] : -1};
     }
     else if (H) {
       const my = name ? S.seats.indexOf(name) : -1, h = {};

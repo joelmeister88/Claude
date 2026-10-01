@@ -19,7 +19,7 @@ If `HOST_KEY` isn't set, the server makes one up, saves it with the table and pr
 ### Who does what
 
 - **Host**: the first person to join the link. Approves seats, gives chips, adds bots, can stand a player up.
-- **Dealer**: whoever has the button (the gold **D**). Between hands the dealer picks the blinds and taps **Deal**. If they don't deal within 30s (after the 10s pause), the deal passes to the player on their left. Bots deal on their own, as long as a person is seated.
+- **Dealer**: whoever has the button (the gold **D**). Between hands the dealer picks the blinds and taps **Deal**. If they don't deal within 2 minutes (after the 10s pause), the deal passes to the player on their left. Bots deal on their own, as long as a person is seated.
 - **Admin**: anyone with the `HOST_KEY` password. Can **Become host**, delete saved names, and **Reset table**, which erases everyone, all chips, the name history and the host.
 
 ### Games (dealer's choice)

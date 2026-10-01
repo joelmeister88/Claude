@@ -156,25 +156,25 @@ test('the dealer deals with their own blinds; nobody else can', () => {
   for (const n of ['A', 'B', 'C']) { t.player(n, {t: 'sit'}); t.host({op: 'seat', name: n}) }
   const s = t.state();
   assert.equal(s.seats[s.dealer], 'A', 'first dealer is the first seat');
-  assert.equal(s.dealDl, c.t + 30000);
+  assert.equal(s.dealDl, c.t + 120000, 'the dealer has 2 minutes');
   assert.equal(t.player('B', {t: 'deal'}), "You're not the dealer");
   for (const bad of [0, 5, 25, -10, 'x']) assert.match(t.player('A', {t: 'deal', bb: bad}), /10 or more, in steps of 10/);
   assert.equal(t.player('A', {t: 'deal', bb: 50, sb: 7}), undefined, 'small blind is not the dealer\'s to pick');
   assert.equal(s.btn, 0); assert.equal(s.sb, 25); assert.equal(s.hand.cur, 50);
   for (let g = 0; g < 50 && !s.hand.done; g++) t.player(s.seats[s.hand.turn], {t: 'act', a: 'fold'});
   assert.equal(s.seats[s.dealer], 'B', 'button moves one to the left');
-  assert.equal(s.dealDl, c.t + 10000 + 30000, 'clock starts after the 10s pause');
+  assert.equal(s.dealDl, c.t + 10000 + 120000, 'clock starts after the 10s pause');
 });
 
-test('a dealer who waits 30s passes the deal to the left', () => {
+test('a dealer who waits 2 minutes passes the deal to the left', () => {
   const c = clock(), t = createTable(null, {now: c});
   for (const n of ['A', 'B', 'C']) { t.player(n, {t: 'sit'}); t.host({op: 'seat', name: n}) }
   const s = t.state();
-  c.t += 29999; t.tick(); assert.equal(s.seats[s.dealer], 'A');
+  c.t += 119999; t.tick(); assert.equal(s.seats[s.dealer], 'A');
   c.t += 1; t.tick(); assert.equal(s.seats[s.dealer], 'B');
-  assert.equal(s.dealDl, c.t + 30000, 'new dealer gets a fresh 30s');
+  assert.equal(s.dealDl, c.t + 120000, 'new dealer gets a fresh 2 minutes');
   assert.equal(t.player('A', {t: 'deal'}), "You're not the dealer");
-  c.t += 30000; t.tick(); c.t += 30000; t.tick();
+  c.t += 120000; t.tick(); c.t += 120000; t.tick();
   assert.equal(s.seats[s.dealer], 'A', 'and around the table');
 });
 
@@ -415,4 +415,16 @@ test('Screw Your Neighbor: nobody antes again in time, so the pot waits for the 
   c.t += 10000; t.tick();
   t.player(s.seats[s.dealer], {t: 'deal'});
   assert.equal(s.hand.pot, 400, 'carried into the next game');
+});
+
+test('Screw Your Neighbor: each player sees what they traded, and nobody else does', () => {
+  // B=5, C=K, A=9; deck top is 3
+  const t = synTable(['A', 'B', 'C'], [C('2'), C('3'), C('9'), C('K'), C('5')]);
+  t.player('A', {t: 'deal'});
+  t.player('B', {t: 'act', a: 'swap'});
+  assert.deepEqual(t.view('B').hand.notes, [{k: 'gave', to: 'C', gave: C('5'), got: C('K')}]);
+  assert.deepEqual(t.view('C').hand.notes, [{k: 'took', from: 'B', gave: C('K'), got: C('5')}]);
+  assert.deepEqual(t.view('A').hand.notes, [], 'the dealer did not see that trade');
+  t.player('C', {t: 'act', a: 'keep'}); t.player('A', {t: 'act', a: 'swap'});
+  assert.deepEqual(t.view('A').hand.notes, [{k: 'deck', gave: C('9'), got: C('3')}]);
 });

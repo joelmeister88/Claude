@@ -29,6 +29,7 @@ button{cursor:pointer;font-weight:600;min-height:44px}input{width:90px;font-size
 .game{display:block;width:100%;text-align:left;margin-top:8px;padding:10px 12px;font-weight:400}.game b{font-size:17px}.game.cur{border:2px solid #0b6b3a}
 .coin{display:inline-block;width:9px;height:9px;border-radius:50%;background:radial-gradient(circle at 35% 35%,#fff3b0,#e0a800 60%,#a87400);border:1px solid #7a5600;margin:0 1px;vertical-align:middle}.coin.x{opacity:.25;filter:grayscale(1)}.lv{line-height:12px;margin-top:2px}.lv.big .coin{width:18px;height:18px;margin:0 2px}
 .deck{position:relative;display:inline-block}.deck b{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);background:#000c;color:#fff;border-radius:10px;padding:1px 7px;font-size:14px}
+.trades{margin-top:6px;padding:6px 8px;border-radius:8px;background:#0000000d;font-size:14px;line-height:1.4}
 .st.lo{box-shadow:0 0 0 3px #e0574b}
 #rules{position:fixed;inset:0;z-index:9;background:var(--bg);overflow:auto;padding:12px max(12px,calc(50% - 270px));padding-top:max(12px,env(safe-area-inset-top))}#rules h3{margin:14px 0 4px}#rules li{margin:4px 0;line-height:1.35}#rules ul{padding-left:20px;margin:4px 0}
 .lnk{background:none;border:0;padding:4px;min-height:0;opacity:.6;font-weight:400;text-decoration:underline}
@@ -76,6 +77,10 @@ function connect(){
 const left=t=>Math.max(0,Math.ceil((t+off-(S&&S.paused?S.paused+off:Date.now()))/1000));
 // blinds: 10 or more, in steps of 10
 const snap=v=>Math.max(10,Math.round((+v||0)/10)*10);
+// a card named inline in text, e.g. K♥
+const cn=c=>`<b style="color:${[1,2].includes(c/13|0)?'#c0262d':'inherit'}">${RK[2+c%13].replace('T','10')}${SU[c/13|0]}</b>`;
+// Screw Your Neighbor: what you traded this round (only you and your trade partner see these)
+const tradeText=x=>x.k=='gave'?`You gave ${esc(x.to)} your ${cn(x.gave)} and got ${cn(x.got)}.`:x.k=='took'?`${esc(x.from)} gave you ${cn(x.got)} and took your ${cn(x.gave)}.`:x.k=='deck'?`You swapped your ${cn(x.gave)} with the deck and got ${cn(x.got)}.`:x.k=='blocked'?`${esc(x.to)} had an Ace, so your swap was refused.`:`${esc(x.from)} tried to take your Ace. You kept it.`;
 const coins=n=>'<i class="coin"></i>'.repeat(Math.max(0,n))+'<i class="coin x"></i>'.repeat(Math.max(0,4-n));
 function setAnte(v){dan=Math.max(100,Math.round((+v||0)/100)*100);const i=$('#dan');if(i)i.value=dan}
 // Hold'em raises: steps of the big blind, at least one big blind more, all-in is the cap
@@ -110,10 +115,11 @@ function render(){const m=$('#main');
   if(inG){const al=H.lives[my]>0,mc=H.cards[my],pk=Date.now()<peekT,open=H.shown[my]||H.stage=='reveal';
    me_+=`<div class="lv big">${coins(H.lives[my])}</div>`;
    if(mc!=null)me_+=`<div class="row">${ch(open||pk?mc:null,'lg')}${open?'':pk?'<button data-a="hide">🙈 Hide now</button>':'<button data-a="peek">👁 Peek 3s</button>'}${al&&H.stage=='play'&&mc%13==12&&!H.shown[my]?'<button class="g" data-a="showace">Show my Ace</button>':''}</div>`;
+   if((H.notes||[]).length)me_+=`<div class="trades">${H.notes.map(x=>`<div>🔁 ${tradeText(x)}</div>`).join('')}</div>`;
    if(!H.done&&al&&H.stage=='play'&&H.turn==my)me_+=`<div class="row"><b>Your turn</b> <span class="clock" data-cd="${H.dl||0}"></span></div><div class="row act"><button class="g" data-a="keep">Keep</button><button class="r" data-a="swap">${H.nb>=0?'Swap with '+esc(S.seats[H.nb]):'Swap with the deck'}</button></div>`;
    else if(!H.done&&!al)me_+=`<div class="m">You're out of lives. Watch until someone wins.</div>`;
    else if(!H.done&&H.stage=='play')me_+=`<div class="m">Waiting for ${esc(S.seats[H.turn])}… <span data-cd="${H.dl||0}"></span></div>`;
-   else if(!H.done)me_+=`<div class="m">Next round in a moment…</div>`}
+   else if(!H.done)me_+=`<div class="m">Next round deals in <span data-cd="${H.nextAt||0}"></span></div>`}
   else if(inH){const pk=Date.now()<peekT;me_+=`<div class="row">${H.h[my].map(c=>ch(pk?c:null,'lg')).join('')}${pk?'<button data-a="hide">🙈 Hide now</button>':'<button data-a="peek">👁 Peek 3s</button>'}</div>`;
    if(!H.done&&H.turn==my){const need=H.cur-H.bet[my];rtStep=S.bb;rtMax=H.bet[my]+pl.chips;rtMin=Math.min(Math.ceil((H.cur+rtStep)/rtStep)*rtStep,rtMax);const mn=rtMin;if(!rt||rt<mn||rt>rtMax)rt=mn;else rt=rtSnap(rt);
     me_+=`<div class="row"><b>Your turn</b> <span class="clock" data-cd="${H.dl||0}"></span></div><div class="row act"><button class="r" data-a="fold">Fold</button><button class="g" data-a="call">${need>0?'Call '+Math.min(need,pl.chips):'Check'}</button><button data-a="allin">All-in</button></div>`;
@@ -128,7 +134,7 @@ function render(){const m=$('#main');
  if(picking&&myDeal){put(m,`<div class="p turn"><div class="row"><b style="flex:1">Choose the game</b><span class="clock" data-cd="${S.dealDl}"></span></div><small>You're the dealer. Pick what everyone plays next.</small>${S.games.map(g=>`<button class="game ${g.id==S.game?'cur':''}" data-a="setgame" data-v="${g.id}" ${g.ready?'':'disabled'}><b>${esc(g.name)}</b>${g.id==S.game?' <small>· now playing</small>':''}<br><small>${esc(g.blurb)}</small></button>`).join('')}<div class="row"><button data-a="unpick">Back</button></div></div>`);lastN=S.n;renderLobby();renderHost();renderAdmin();tick();return}
  if(!myDeal)picking=false;
  const f=document.activeElement;
- if(!(myDeal&&f&&(f.id=='dbb'||f.id=='dan')))put(m,`<div class="tbl" style="aspect-ratio:${N<=3?'1/1':N<=7?'6/7':'4/5'}">${seats}<div class="mid">${board}</div><div class="info"><div style="font-size:16px"><i class="ch"></i><b>Pot ${pot}</b></div>${isSyn&&!H.done?`<div style="font-size:12px">Round ${H.round}</div>`:''}<div style="font-size:12px">${S.hold=='host'?'<b style="color:#ffd54a">⏸ Paused by the host</b><br>':S.hold=='seats'?`<b style="color:#ffd54a">⏸ Waiting for the host to seat ${esc(Object.keys(S.pend).join(', '))}</b><br>`:''}${H?esc(H.msg):''}${S.again?`<br>Play again? ${Object.keys(S.again.yes).length} in so far <span data-cd="${S.again.until}"></span>`:!live&&S.dealDl&&dealer?`<br><span class="d">D</span>${esc(dealer)} deals next <span data-cd="${S.dealDl}"></span>`:!live&&!S.dealDl?'<br>Waiting for players':''}</div></div></div><div class="p ${(live&&H.turn==my&&my>=0)||myDeal||askMe?'turn':''}">${me_}</div>`);
+ if(!(myDeal&&f&&(f.id=='dbb'||f.id=='dan')))put(m,`<div class="tbl" style="aspect-ratio:${N<=3?'1/1':N<=7?'6/7':'4/5'}">${seats}<div class="mid">${board}</div><div class="info"><div style="font-size:16px"><i class="ch"></i><b>Pot ${pot}</b></div>${isSyn&&!H.done?`<div style="font-size:12px">Round ${H.round}${H.stage=='reveal'?` · next round in <span data-cd="${H.nextAt||0}"></span>`:''}</div>`:''}<div style="font-size:12px">${S.hold=='host'?'<b style="color:#ffd54a">⏸ Paused by the host</b><br>':S.hold=='seats'?`<b style="color:#ffd54a">⏸ Waiting for the host to seat ${esc(Object.keys(S.pend).join(', '))}</b><br>`:''}${H?esc(H.msg):''}${S.again?`<br>Play again? ${Object.keys(S.again.yes).length} in so far <span data-cd="${S.again.until}"></span>`:!live&&S.dealDl&&dealer?`<br><span class="d">D</span>${esc(dealer)} deals next <span data-cd="${S.dealDl}"></span>`:!live&&!S.dealDl?'<br>Waiting for players':''}</div></div></div><div class="p ${(live&&H.turn==my&&my>=0)||myDeal||askMe?'turn':''}">${me_}</div>`);
  if(myDeal&&lastDeal!==S.dealDl){beep(523,.12);navigator.vibrate&&navigator.vibrate(120)}lastDeal=myDeal?S.dealDl:0;
  if(H&&!H.done&&H.turn==my&&lastN!=S.n){rt=0;beep(660,.12);beep(880,.2,.15);navigator.vibrate&&navigator.vibrate(200)}
  if(H&&H.done&&lastN!=S.n&&lastN>=0){[523,659,784].forEach((f,i)=>beep(f,.15,i*.12))}
