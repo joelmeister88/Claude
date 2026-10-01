@@ -37,7 +37,7 @@ small,.m{opacity:.7}h4{margin:8px 0 2px}
 <script>
 'use strict';
 const $=s=>document.querySelector(s),SU='♠♥♦♣',RK='  23456789TJQKA';
-let ws,S=null,me='',token='',hostKey='',host=false,admin=false,renaming=false,showKey=false,arm='',dsb='',dbb='',lastDeal=0,off=0,rt=0,peekT=0,snd=true,AC,lastN=-1,addAmt={},adjFor='',noteT,retry=0;
+let ws,S=null,me='',token='',hostKey='',host=false,admin=false,renaming=false,showKey=false,arm='',dbb=0,lastDeal=0,off=0,rt=0,peekT=0,snd=true,AC,lastN=-1,addAmt={},adjFor='',noteT,retry=0;
 try{token=localStorage.getItem('pn_token')||'';hostKey=localStorage.getItem('pn_host')||''}catch(e){}
 // the admin link is /#host=KEY: remember the key on this device, then drop it from the address bar
 {const m=location.hash.match(/host=([^&]+)/);if(m){try{hostKey=decodeURIComponent(m[1])}catch(e){hostKey=m[1]}try{localStorage.setItem('pn_host',hostKey)}catch(e){}history.replaceState(null,'',location.pathname)}}
@@ -65,7 +65,11 @@ function connect(){
 }
 // ---------- UI ----------
 // deadlines are server-clock times; `off` maps them onto this device's clock
-const left=t=>Math.max(0,Math.ceil((t+off-Date.now())/1000));
+// while the host has paused the timers, countdowns hold still
+const left=t=>Math.max(0,Math.ceil((t+off-(S&&S.paused?S.paused+off:Date.now()))/1000));
+// blinds: 10 or more, in steps of 10
+const snap=v=>Math.max(10,Math.round((+v||0)/10)*10);
+function setBB(v){dbb=snap(v);const i=$('#dbb');if(i)i.value=dbb;const l=$('#sbl');if(l)l.textContent='Small blind '+dbb/2}
 // live countdowns update text in place (no re-render), so buttons aren't swapped out under a tap
 function tick(){document.querySelectorAll('[data-cd]').forEach(e=>{const s=left(+e.dataset.cd),t=s?s+'s':'';if(e.textContent!==t)e.textContent=t});
  const d=$('[data-a=deal][data-until]');if(d){const s=left(+d.dataset.until);d.disabled=s>0;const t=s?'Deal in '+s+'s':'Deal';if(d.textContent!==t)d.textContent=t}}
@@ -95,11 +99,11 @@ function render(){const m=$('#main');
     if(pl.chips>need)me_+=`<div class="row act"><input id="rt" type="number" inputmode="numeric" value="${rt}"><button class="g" data-a="raise">${H.cur?'Raise to':'Bet'}</button><button data-a="q" data-v="${mn}">Min</button><button data-a="q" data-v="${H.cur+Math.floor(pot/2)}">½ Pot</button><button data-a="q" data-v="${H.cur+pot}">Pot</button></div>`}
    else if(!H.done)me_+=`<div class="m">Waiting for ${esc(S.seats[H.turn])}… <span data-cd="${H.dl||0}"></span></div>`}
   else if(H&&!H.done)me_+=`<div class="m">You're sitting out this hand.</div>`;
-  if(myDeal)me_+=`<div class="row"><b>You're the dealer</b> <span class="clock" data-cd="${S.dealDl}"></span></div><div class="row act">Blinds <input id="dsb" type="number" inputmode="numeric" value="${esc(dsb||S.sb)}"> / <input id="dbb" type="number" inputmode="numeric" value="${esc(dbb||S.bb)}"><button class="g" data-a="deal" data-until="${S.wait||0}">Deal</button></div><small>Deal within the time or the deal passes to your left.</small>`;
+  if(myDeal)me_+=`<div class="row"><b>You're the dealer</b> <span class="clock" data-cd="${S.dealDl}"></span></div><div class="row act"><span>Blind</span><button data-a="bbdn" aria-label="Lower blind">−</button><input id="dbb" type="number" inputmode="numeric" min="10" step="10" value="${dbb||S.bb}"><button data-a="bbup" aria-label="Raise blind">+</button></div><div class="row act"><small id="sbl" style="flex:1">Small blind ${(dbb||S.bb)/2}</small><button class="g" data-a="deal" data-until="${S.wait||0}">Deal</button></div><small>Deal within the time or the deal passes to your left.</small>`;
   me_+=`<div class="row">${S.leave[me]?'<small>Standing up when this hand ends…</small>':`<button class="r" data-a="stand">Stand Up</button>`}${S.buy[me]?'<small>Chip request sent, waiting for host…</small>':'<button data-a="buy">Get more chips</button>'}</div>`;
   if(inH&&!H.done&&!S.leave[me])me_+='<small>Standing up mid-hand folds your cards.</small>'}
  const f=document.activeElement;
- if(!(myDeal&&f&&(f.id=='dsb'||f.id=='dbb')))put(m,`<div class="tbl" style="aspect-ratio:${N<=3?'1/1':N<=7?'6/7':'4/5'}">${seats}<div class="mid">${board}</div><div class="info"><div style="font-size:16px"><i class="ch"></i><b>Pot ${pot}</b></div><div style="font-size:12px">${H?esc(H.msg):''}${!live&&S.dealDl&&dealer?`<br><span class="d">D</span>${esc(dealer)} deals next <span data-cd="${S.dealDl}"></span>`:!live&&!S.dealDl?'<br>Waiting for players':''}</div></div></div><div class="p ${(live&&H.turn==my&&my>=0)||myDeal?'turn':''}">${me_}</div>`);
+ if(!(myDeal&&f&&f.id=='dbb'))put(m,`<div class="tbl" style="aspect-ratio:${N<=3?'1/1':N<=7?'6/7':'4/5'}">${seats}<div class="mid">${board}</div><div class="info"><div style="font-size:16px"><i class="ch"></i><b>Pot ${pot}</b></div><div style="font-size:12px">${S.paused?'<b style="color:#ffd54a">⏸ Paused by the host</b><br>':''}${H?esc(H.msg):''}${!live&&S.dealDl&&dealer?`<br><span class="d">D</span>${esc(dealer)} deals next <span data-cd="${S.dealDl}"></span>`:!live&&!S.dealDl?'<br>Waiting for players':''}</div></div></div><div class="p ${(live&&H.turn==my&&my>=0)||myDeal?'turn':''}">${me_}</div>`);
  if(myDeal&&lastDeal!==S.dealDl){beep(523,.12);navigator.vibrate&&navigator.vibrate(120)}lastDeal=myDeal?S.dealDl:0;
  if(H&&!H.done&&H.turn==my&&lastN!=S.n){rt=0;beep(660,.12);beep(880,.2,.15);navigator.vibrate&&navigator.vibrate(200)}
  if(H&&H.done&&lastN!=S.n&&lastN>=0){[523,659,784].forEach((f,i)=>beep(f,.15,i*.12))}
@@ -117,7 +121,7 @@ function renderHost(){const e=$('#host'),f=document.activeElement;if(!host)retur
  const bust=Object.keys(S.bust).map(n=>`<div class="row"><b>${esc(n)}</b> is out of chips, deciding… <span data-cd="${S.bust[n]}"></span></div>`).join('');
  const o=owed(),live=H&&!H.done,dn=S.seats[S.dealer],st=live?'Hand in progress':o.length?'Waiting on '+esc(o.join(', ')):dn&&S.dealDl?`Dealer: ${esc(dn)}`:'Waiting for players';
  const led=Object.keys(S.players).map(n=>{const seated=S.seats.includes(n),v=esc(n);return`<div class="row"><span style="flex:1">${v} ${seated?'':'<small>(away)</small>'}</span><b>${S.players[n].chips}</b>${adjFor==n?`<input data-adjin="${v}" type="number" placeholder="±" style="width:80px"><button class="g" data-a="adjok" data-v="${v}">OK</button>`:`<button data-a="adj" data-v="${v}">±</button>`}${S.players[n].bot?`<button data-a="rmbot" data-v="${v}">✕</button>`:seated?`<button data-a="kick" data-v="${v}" title="Stand this player up">⏏</button>`:''}</div>`}).join('');
- put(e,`<div class="p"><b>Host controls</b> <small>${esc(S.gameName)}</small><div class="row"><span style="flex:1">${st}</span>${!live&&dn&&S.dealDl?`<button data-a="start" title="Deal for the dealer">Deal now</button>`:''}<button data-a="bot">+ Bot</button></div>
+ put(e,`<div class="p"><b>Host controls</b> <small>${esc(S.gameName)}</small><div class="row"><span style="flex:1">${st}</span><button data-a="pause" ${S.paused?'class="g">▶ Resume':'>⏸ Pause'}</button>${!live&&dn&&S.dealDl?`<button data-a="start" title="Deal for the dealer">Deal now</button>`:''}<button data-a="bot">+ Bot</button></div>
  ${pend?'<h4>Seat requests</h4>'+pend:''}${buy?'<h4>Chip requests</h4>'+buy:''}${bust?'<h4>Out of chips</h4>'+bust:''}<h4>Chip ledger</h4>${led||'<small>No players yet</small>'}</div>`);tick()}
 document.addEventListener('click',async e=>{const b=e.target.closest('[data-a]');if(!b)return;const a=b.dataset.a,v=b.dataset.v;
  try{AC=AC||new AudioContext();AC.resume()}catch(x){}
@@ -125,7 +129,9 @@ document.addEventListener('click',async e=>{const b=e.target.closest('[data-a]')
  else if(a=='pick')send({t:'name',name:v});
  else if(a=='rename'){renaming=true;render()}
  else if(a=='unrename'){renaming=false;render()}
- else if(a=='deal'){send({t:'deal',sb:$('#dsb').value,bb:$('#dbb').value});dsb=dbb=''}
+ else if(a=='deal'){setBB($('#dbb').value);send({t:'deal',bb:dbb});dbb=0}
+ else if(a=='bbup')setBB(+$('#dbb').value+10);
+ else if(a=='bbdn')setBB(+$('#dbb').value-10);
  else if(a=='showkey'){showKey=true;renderAdmin();$('#ak').focus()}
  else if(a=='unlock'){const k=$('#ak').value;if(k)send({t:'admin',key:k})}
  else if(a=='takeover')send({t:'admin',op:'takeover'});
@@ -145,6 +151,7 @@ document.addEventListener('click',async e=>{const b=e.target.closest('[data-a]')
  else if(a=='hide'){peekT=0;render()}
  else if(!host)return;
  else if(a=='start')hs('start');
+ else if(a=='pause')hs('pause',{on:!S.paused});
  else if(a=='ok'){hs('seat',{name:v,add:addAmt[v]});delete addAmt[v]}
  else if(a=='no')hs('noseat',{name:v});
  else if(a=='give'){hs('give',{name:v,add:addAmt[v]??1000});delete addAmt[v]}
@@ -154,8 +161,8 @@ document.addEventListener('click',async e=>{const b=e.target.closest('[data-a]')
  else if(a=='kick')hs('kick',{name:v});
  else if(a=='adj'){adjFor=v;render();const i=$('[data-adjin]');i&&i.focus()}
  else if(a=='adjok'){const x=$('[data-adjin]').value;adjFor='';hs('adj',{name:v,x});render()}});
-document.addEventListener('focusout',e=>{if(e.target.id=='dsb'||e.target.id=='dbb')setTimeout(render,300)});
+document.addEventListener('focusout',e=>{if(e.target.id=='dbb'){setBB(e.target.value);setTimeout(render,300)}});
 document.addEventListener('keydown',e=>{if(e.key!='Enter')return;if(e.target.id=='nm')$('[data-a=name]').click();if(e.target.id=='ak')$('[data-a=unlock]').click()});
-document.addEventListener('input',e=>{const t=e.target;if(t.id=='rt')rt=+t.value;if(t.id=='dsb')dsb=t.value;if(t.id=='dbb')dbb=t.value;if(t.dataset.add)addAmt[t.dataset.add]=t.value});
+document.addEventListener('input',e=>{const t=e.target;if(t.id=='rt')rt=+t.value;if(t.id=='dbb'){const l=$('#sbl');if(l)l.textContent='Small blind '+snap(t.value)/2}if(t.dataset.add)addAmt[t.dataset.add]=t.value});
 render();connect();
 </script></body></html>

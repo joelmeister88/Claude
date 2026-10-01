@@ -86,7 +86,22 @@ if (await P.p.$('[data-a=fold]')) { await checkTurn(); await P.p.click('[data-a=
 await P.p.waitForSelector("text=You're the dealer");
 ok(await P.p.isDisabled('[data-a=deal]') && /Deal in \d+s/.test(await P.p.textContent('[data-a=deal]')), 'dealer waits out the 10s pause');
 ok((await H.p.textContent('#main')).includes('Pat deals next'), 'everyone sees who deals next');
-await P.p.fill('#dsb', '20'); await P.p.fill('#dbb', '40');
+await P.p.fill('#dbb', '37'); await P.p.click('#sbl');
+ok(await P.p.inputValue('#dbb') == '40' && (await P.p.textContent('#sbl')).includes('20'), 'typed blind snaps to steps of 10; small blind is half');
+await P.p.fill('#dbb', '3'); await P.p.click('#sbl');
+ok(await P.p.inputValue('#dbb') == '10', 'blind is at least 10');
+await P.p.click('[data-a=bbdn]'); ok(await P.p.inputValue('#dbb') == '10', 'minus stops at 10');
+for (let k = 0; k < 4; k++) await P.p.click('[data-a=bbup]');
+await P.p.click('[data-a=bbdn]');
+ok(await P.p.inputValue('#dbb') == '40', 'plus and minus move by 10');
+// host pauses: the dealer's clock stops for everyone
+await H.p.click('[data-a=pause]');
+await P.p.waitForSelector('text=Paused by the host');
+const c1 = await P.p.textContent('.clock'); await P.p.waitForTimeout(2200);
+ok(c1 && c1 == await P.p.textContent('.clock'), 'pause freezes the countdown');
+await H.p.click('[data-a=pause]');
+await P.p.waitForSelector('text=Paused by the host', {state: 'detached'});
+ok(true, 'host resumes the timers');
 await P.p.waitForFunction(() => !document.querySelector('[data-a=deal]').disabled, null, {timeout: 12000});
 await P.p.click('[data-a=deal]');
 await P.p.waitForFunction(() => document.querySelector('.info')?.textContent.includes('Pot 60'), null, {timeout: 3000}).catch(() => {});

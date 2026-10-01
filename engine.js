@@ -37,6 +37,8 @@ function cryptoShuffle() {
 const fresh = () => ({players: {}, seats: Array(SEATS).fill(''), pend: {}, leave: {}, bust: {}, buy: {}, wait: 0,
   hand: null, btn: -1, dealer: -1, dealDl: 0, sb: 5, bb: 10, game: 'holdem', n: 0, last: -1, known: {}});
 const int = v => { const x = Math.floor(+v); return Number.isFinite(x) ? x : NaN };
+// the dealer picks the big blind: at least 10, in steps of 10; the small blind is always half
+const blindError = bb => bb >= 10 && bb % 10 == 0 ? '' : 'Blind must be 10 or more, in steps of 10';
 
 /**
  * opts: now() clock, random() for bots, shuffle() -> 52-card deck (last card dealt first),
@@ -158,9 +160,8 @@ function createTable(saved, {now = Date.now, random = Math.random, shuffle = cry
     else if (m.t == 'buy') { if (!seated) return; delete S.bust[n]; S.buy[n] = 1 }
     else if (m.t == 'deal') {
       if (S.seats[S.dealer] !== n) return "You're not the dealer";
-      const sb = m.sb == null ? S.sb : int(m.sb), bb = m.bb == null ? S.bb : int(m.bb);
-      if (!(sb >= 1 && bb >= sb)) return 'Big blind must be at least the small blind';
-      const keep = [S.sb, S.bb]; S.sb = sb; S.bb = bb;
+      const bb = m.bb == null ? S.bb : int(m.bb), e0 = blindError(bb); if (e0) return e0;
+      const keep = [S.sb, S.bb]; S.sb = bb / 2; S.bb = bb;
       const e = startHand(); if (e) { [S.sb, S.bb] = keep; return e }
     }
     else if (m.t == 'act') { if (!live() || S.seats[S.hand.turn] !== n) return 'Not your turn'; S.players[n].miss = 0; act(n, m.a, m.amt) }
@@ -189,13 +190,24 @@ function createTable(saved, {now = Date.now, random = Math.random, shuffle = cry
       case 'nobuy': delete S.buy[n]; if (p.chips <= 0 && !inLiveHand(n) && S.seats.includes(n)) stand(n); break;
       case 'adj': { const x = int(m.x); if (!x) return; if (inLiveHand(n)) return 'Wait until this hand ends'; p.chips = Math.max(0, p.chips + x); break }
       case 'kick': standOrLeave(n); break;
-      case 'blinds': { const sb = int(m.sb), bb = int(m.bb); if (!(sb >= 1 && bb >= sb)) return 'Big blind must be at least the small blind'; S.sb = sb; S.bb = bb; break }
+      case 'blinds': { const bb = int(m.bb), e = blindError(bb); if (e) return e; S.sb = bb / 2; S.bb = bb; break }
+      case 'pause': {
+        // freeze every clock; on resume, push each deadline back by however long we were paused
+        if (m.on && !S.paused) { S.paused = 1; S.pausedAt = now() }
+        else if (!m.on && S.paused) {
+          const d = now() - S.pausedAt, H = S.hand; S.paused = 0; S.pausedAt = 0;
+          if (S.wait) S.wait += d; if (S.dealDl) S.dealDl += d; for (const n in S.bust) S.bust[n] += d;
+          if (H && H.dl) H.dl += d; if (botAt) botAt += d;
+        }
+        break;
+      }
       default: return;
     }
     changed();
   }
   /** Timers: bust deadlines and bot moves. Call a few times a second. */
   function tick() {
+    if (S.paused) return;
     let ch = 0; const t = now();
     for (const n in S.bust) if (t >= S.bust[n]) { stand(n); ch = 1 }
     const H = S.hand;
@@ -245,6 +257,7 @@ function createTable(saved, {now = Date.now, random = Math.random, shuffle = cry
     const players = {}; for (const n in S.players) players[n] = {chips: S.players[n].chips, bot: !!S.players[n].bot};
     return {players, seats: S.seats, pend: S.pend, leave: S.leave, bust: S.bust, buy: S.buy, wait: S.wait, hand,
       btn: S.btn, dealer: S.dealer, dealDl: S.dealDl, sb: S.sb, bb: S.bb, game: S.game, gameName: GAMES[S.game].name, n: S.n,
+      paused: S.paused ? S.pausedAt : 0,
       known: Object.keys(S.known).sort((a, b) => S.known[b] - S.known[a])};
   }
   return {state: () => S, view, player, host, tick, remember, forget, reset};

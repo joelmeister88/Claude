@@ -158,8 +158,8 @@ test('the dealer deals with their own blinds; nobody else can', () => {
   assert.equal(s.seats[s.dealer], 'A', 'first dealer is the first seat');
   assert.equal(s.dealDl, c.t + 30000);
   assert.equal(t.player('B', {t: 'deal'}), "You're not the dealer");
-  assert.match(t.player('A', {t: 'deal', sb: 50, bb: 25}), /at least the small blind/);
-  assert.equal(t.player('A', {t: 'deal', sb: 25, bb: 50}), undefined);
+  for (const bad of [0, 5, 25, -10, 'x']) assert.match(t.player('A', {t: 'deal', bb: bad}), /10 or more, in steps of 10/);
+  assert.equal(t.player('A', {t: 'deal', bb: 50, sb: 7}), undefined, 'small blind is not the dealer\'s to pick');
   assert.equal(s.btn, 0); assert.equal(s.sb, 25); assert.equal(s.hand.cur, 50);
   for (let g = 0; g < 50 && !s.hand.done; g++) t.player(s.seats[s.hand.turn], {t: 'act', a: 'fold'});
   assert.equal(s.seats[s.dealer], 'B', 'button moves one to the left');
@@ -198,4 +198,20 @@ test('name history: remembers people (not bots), forget and reset', () => {
   assert.ok(!t.state().players.Old && !t.view('').known.includes('Old'));
   t.reset();
   assert.deepEqual(t.view('').known, []); assert.deepEqual(t.state().players, {}); assert.ok(t.state().seats.every(x => !x));
+});
+
+test('host pause freezes every clock and resume pushes deadlines back', () => {
+  const c = clock(), t = createTable(null, {now: c});
+  for (const n of ['A', 'B', 'C']) { t.player(n, {t: 'sit'}); t.host({op: 'seat', name: n}) }
+  t.host({op: 'start'});
+  const s = t.state(), dl = s.hand.dl, who = s.hand.turn;
+  assert.ok(dl > 0);
+  t.host({op: 'pause', on: true});
+  assert.ok(t.view('').paused);
+  c.t += 600000; t.tick();
+  assert.equal(s.hand.turn, who, 'turn clock frozen');
+  t.host({op: 'pause', on: false});
+  assert.equal(s.hand.dl, dl + 600000, 'deadline pushed back by the pause');
+  c.t += 29000; t.tick(); assert.equal(s.hand.turn, who);
+  c.t += 1001; t.tick(); assert.notEqual(s.hand.turn, who, 'clock runs again');
 });
