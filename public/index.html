@@ -29,6 +29,8 @@ button{cursor:pointer;font-weight:600;min-height:44px}input{width:90px;font-size
 .game{display:block;width:100%;text-align:left;margin-top:8px;padding:10px 12px;font-weight:400}.game b{font-size:17px}.game.cur{border:2px solid #0b6b3a}
 .coin{display:inline-block;width:9px;height:9px;border-radius:50%;background:radial-gradient(circle at 35% 35%,#fff3b0,#e0a800 60%,#a87400);border:1px solid #7a5600;margin:0 1px;vertical-align:middle}.coin.x{opacity:.25;filter:grayscale(1)}.lv{line-height:12px;margin-top:2px}.lv.big .coin{width:18px;height:18px;margin:0 2px}
 .deck{position:relative;display:inline-block}.deck b{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);background:#000c;color:#fff;border-radius:10px;padding:1px 7px;font-size:14px}
+.note-ok{margin-top:6px;font-weight:600}
+button:disabled{opacity:.4;cursor:not-allowed}
 .trades{margin-top:6px;padding:6px 8px;border-radius:8px;background:#0000000d;font-size:14px;line-height:1.4}
 .st.lo{box-shadow:0 0 0 3px #e0574b}
 #rules{position:fixed;inset:0;z-index:9;background:var(--bg);overflow:auto;padding:12px max(12px,calc(50% - 270px));padding-top:max(12px,env(safe-area-inset-top))}#rules h3{margin:14px 0 4px}#rules li{margin:4px 0;line-height:1.35}#rules ul{padding-left:20px;margin:4px 0}
@@ -116,7 +118,13 @@ function render(){const m=$('#main');
    me_+=`<div class="lv big">${coins(H.lives[my])}</div>`;
    if(mc!=null)me_+=`<div class="row">${ch(open||pk?mc:null,'lg')}${open?'':pk?'<button data-a="hide">🙈 Hide now</button>':'<button data-a="peek">👁 Peek 3s</button>'}${al&&H.stage=='play'&&mc%13==12&&!H.shown[my]?'<button class="g" data-a="showace">Show my Ace</button>':''}</div>`;
    if((H.notes||[]).length)me_+=`<div class="trades">${H.notes.map(x=>`<div>🔁 ${tradeText(x)}</div>`).join('')}</div>`;
-   if(!H.done&&al&&H.stage=='play'&&H.turn==my)me_+=`<div class="row"><b>Your turn</b> <span class="clock" data-cd="${H.dl||0}"></span></div><div class="row act"><button class="g" data-a="keep">Keep</button><button class="r" data-a="swap">${H.nb>=0?'Swap with '+esc(S.seats[H.nb]):'Swap with the deck'}</button></div>`;
+   if(!H.done&&al&&H.stage=='play'&&H.turn==my){
+    // an Ace in your hand, or one showing on your left, means there's nothing to swap
+    const myAce=mc%13==12,nbAce=H.nb>=0&&H.shown[H.nb];
+    me_+=`<div class="row"><b>Your turn</b> <span class="clock" data-cd="${H.dl||0}"></span></div>`;
+    if(myAce)me_+=`<div class="note-ok">You have an Ace, so you don't need to swap. Next player in <span data-cd="${H.dl||0}"></span></div>`;
+    else if(nbAce)me_+=`<div class="note-ok">You can't swap: ${esc(S.seats[H.nb])} has an Ace. Tap Keep.</div>`;
+    me_+=`<div class="row act"><button class="g" data-a="keep">Keep</button><button class="r" data-a="swap" ${myAce||nbAce?'disabled':''}>${H.nb>=0?'Swap with '+esc(S.seats[H.nb]):'Swap with the deck'}</button></div>`}
    else if(!H.done&&!al)me_+=`<div class="m">You're out of lives. Watch until someone wins.</div>`;
    else if(!H.done&&H.stage=='play')me_+=`<div class="m">Waiting for ${esc(S.seats[H.turn])}… <span data-cd="${H.dl||0}"></span></div>`;
    else if(!H.done)me_+=`<div class="m">Next round deals in <span data-cd="${H.nextAt||0}"></span></div>`}
@@ -233,6 +241,7 @@ const RULES={
   'Each round, everyone still alive gets one card. <b>Aces are high</b>, then King, Queen, Jack, 10 down to 2.',
   'Starting left of the dealer, each player either <b>keeps</b> their card or <b>swaps</b> it with the player on their left, who has to accept.',
   '<b>Nobody can take your Ace.</b> Show it right away, or wait: if someone tries to swap with you, it\'s revealed and they keep their own card.',
+  'Holding an Ace there\'s nothing to decide: your turn passes after 5 seconds (or tap Keep). If the player on your left has an Ace showing, you can\'t swap with them.',
   'The dealer goes last and can swap with the top card of the deck. Whatever comes up is theirs.',
   'Everyone shows their card. The <b>lowest card loses a life</b>. If several tie for lowest, they all lose one.',
   'Lose all 4 lives and you\'re out. The last player with lives wins the pot.',

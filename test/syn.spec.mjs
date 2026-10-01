@@ -61,6 +61,21 @@ ok(r.stage == 'reveal' && Object.values(r.cards).every(c => c != null), 'cards a
 await P.p.waitForFunction(() => document.querySelector('.info').textContent.includes('Round 2'), null, {timeout: 9000});
 ok(true, 'next round deals itself');
 
+// Aces: a crafted round on Pat's screen (Pat to act, Hana on the left)
+async function pretend(edit) {
+  const f = JSON.parse(JSON.stringify(P.last())), h = f.s.hand, my = f.s.seats.indexOf('Pat'), left = f.s.seats.indexOf('Hana');
+  Object.assign(h, {stage: 'play', done: 0, turn: my, nb: left, shown: {}, notes: [], dl: f.now + 5000}); h.lives[my] = h.lives[left] = 3;
+  edit(h, my, left); f.s.n += 1000;
+  await P.p.evaluate(m => ws.onmessage({data: JSON.stringify(m)}), f);
+}
+await pretend((h, my, left) => { h.cards[my] = 12; h.cards[left] = 0 });
+ok(await P.p.isDisabled('[data-a=swap]') && await P.p.isEnabled('[data-a=keep]'), 'holding an Ace: swap is greyed out, keep still works');
+ok(/You have an Ace, so you don't need to swap\. Next player in \ds/.test(await P.p.textContent('#main')), 'and it says the next player is coming up');
+await pretend((h, my, left) => { h.cards[my] = 3; h.cards[left] = 25; h.shown[left] = 1 });
+ok(await P.p.isDisabled('[data-a=swap]') && (await P.p.textContent('#main')).includes("You can't swap: Hana has an Ace"), "an Ace showing on your left: swap is greyed out, with why");
+await pretend((h, my, left) => { h.cards[my] = 3; h.cards[left] = 25 });
+ok(await P.p.isEnabled('[data-a=swap]'), "a hidden Ace on your left doesn't give itself away");
+
 ok(!H.errs.length && !P.errs.length, 'no page errors ' + H.errs.concat(P.errs).join('|'));
 await browser.close(); srv.kill();
 console.log(fails ? fails + ' failing' : 'all passed'); process.exit(fails ? 1 : 0);

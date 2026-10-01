@@ -465,3 +465,26 @@ test('odd raise amounts (negative, text, fractions) never take more than you hav
     for (const x in s.players) assert.ok(s.players[x].chips >= 0 && Number.isInteger(s.players[x].chips), String(amt));
   }
 });
+
+test('Screw Your Neighbor: holding an Ace, swap is off and the turn passes after 5 seconds', () => {
+  const c = clock(), t = synTable(['A', 'B', 'C'], [C('2'), C('3'), C('9'), C('K'), C('A')], c); // B=A, C=K, A=9
+  t.player('A', {t: 'deal'});
+  const s = t.state(), H = s.hand;
+  assert.equal(H.dl, c.t + 5000, 'a 5 second turn');
+  assert.match(t.player('B', {t: 'act', a: 'swap'}), /no need to swap/);
+  c.t += 4999; t.tick(); assert.equal(s.seats[H.turn], 'B');
+  c.t += 1; t.tick();
+  assert.equal(s.seats[H.turn], 'C', 'next player'); assert.equal(H.msg, 'B keeps', 'no "out of time" note');
+  assert.equal(H.dl, c.t + 30000, 'everyone else still gets 30 seconds');
+});
+
+test("Screw Your Neighbor: can't swap into an Ace that's showing; keep instead", () => {
+  const t = synTable(['A', 'B', 'C'], [C('2'), C('3'), C('9'), C('A'), C('5')]); // B=5, C=A, A=9
+  t.player('A', {t: 'deal'});
+  const s = t.state(), H = s.hand;
+  t.player('C', {t: 'act', a: 'show'});
+  assert.match(t.player('B', {t: 'act', a: 'swap'}), /C has an Ace showing/);
+  assert.equal(s.seats[H.turn], 'B', 'still your turn: press Keep');
+  assert.equal(t.player('B', {t: 'act', a: 'keep'}), undefined);
+  assert.equal(s.seats[H.turn], 'C');
+});

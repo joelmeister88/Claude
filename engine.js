@@ -10,7 +10,7 @@ const GAMES = {
   syn: {name: 'Screw Your Neighbor', ready: true, blurb: 'One card each: keep it or swap left. Lowest card loses a life; last one standing takes the pot.'},
 };
 const HN = ['High card', 'Pair', 'Two pair', 'Trips', 'Straight', 'Flush', 'Full house', 'Quads', 'Straight flush'];
-const LIVES = 4, REVEAL = 5000, AGAIN = 30000, WAIT = 10000, BUST = 30000, TURN = 30000, DEAL = 120000, MISSES = 3, BOT_DELAY = 5000, SEATS = 12;
+const LIVES = 4, REVEAL = 5000, AGAIN = 30000, WAIT = 10000, BUST = 30000, TURN = 30000, ACE_TURN = 5000, DEAL = 120000, MISSES = 3, BOT_DELAY = 5000, SEATS = 12;
 
 // ---------- hand evaluation (cards are 0..51: rank c%13, 0='2'..12='A'; suit c/13) ----------
 function s5(c) {
@@ -65,7 +65,7 @@ function createTable(saved, {now = Date.now, random = Math.random, shuffle = cry
     const H = S.hand, p = H && !H.done && S.players[S.seats[H.turn]];
     botAt = p && p.bot ? now() + BOT_DELAY : 0;
     // each new decision gets a fresh 30s turn clock (bots move on their own timer)
-    if (H && !H.done) { const key = H.turn + ':' + (H.nact || 0); if (H.dlKey !== key) { H.dlKey = key; H.dl = p && !p.bot ? now() + TURN : 0 } }
+    if (H && !H.done) { const key = H.turn + ':' + (H.nact || 0); if (H.dlKey !== key) { H.dlKey = key; H.dl = p && !p.bot ? now() + (holdsAce(H.turn) ? ACE_TURN : TURN) : 0 } }
     onChange();
   }
   const freeSeat = () => { for (let k = 1; k <= SEATS; k++) { const i = ((S.last ?? -1) + k + SEATS) % SEATS; if (!S.seats[i]) return i } return -1 };
@@ -192,6 +192,8 @@ function createTable(saved, {now = Date.now, random = Math.random, shuffle = cry
   // while alive) may swap with the top of the deck instead. An Ace can't be taken: a swap with an Ace is
   // refused and the Ace is shown. Everyone tied for the lowest card loses a life. Last one with lives wins.
   const rank = c => c % 13;
+  // Screw Your Neighbor: holding an Ace there's nothing to decide, so that turn is just 5 seconds
+  const holdsAce = i => S.hand.g == 'syn' && S.hand.cards && i in S.hand.cards && rank(S.hand.cards[i]) == ACE;
   const alive = () => S.hand.ps.filter(i => S.hand.lives[i] > 0);
   function startSyn(nb, only) {
     const ps = []; for (let k = 1; k <= SEATS; k++) { const i = (nb + k) % SEATS, n = S.seats[i]; if (n && S.players[n].chips >= S.ante && (!only || only.includes(n))) ps.push(i) }
@@ -218,6 +220,8 @@ function createTable(saved, {now = Date.now, random = Math.random, shuffle = cry
     if (a == 'show') { if (rank(H.cards[i]) == ACE) { H.shown[i] = 1; H.msg = n + ' shows an Ace' } return }
     if (H.turn !== i) return 'Not your turn';
     const al = alive(), k = al.indexOf(i);
+    if (a == 'swap' && rank(H.cards[i]) == ACE) return "You have an Ace: no need to swap";
+    if (a == 'swap' && k < al.length - 1 && H.shown[al[k + 1]]) return S.seats[al[k + 1]] + " has an Ace showing: you can't swap";
     // what each player gave and got this round; only those two players ever see it
     const notes = H.notes = H.notes || {}, note = (who, x) => (notes[who] = notes[who] || []).push(x);
     if (a == 'swap' && k == al.length - 1) {
@@ -346,7 +350,11 @@ function createTable(saved, {now = Date.now, random = Math.random, shuffle = cry
     let ch = 0; const t = now();
     for (const n in S.bust) if (t >= S.bust[n]) { stand(n); ch = 1 }
     const H = S.hand;
-    if (botAt && t >= botAt && live() && syn()) { synAct(S.seats[H.turn], rank(H.cards[H.turn]) >= 6 ? 'keep' : 'swap'); ch = 1 }
+    if (botAt && t >= botAt && live() && syn()) {
+      // bots keep an 8 or better, and never try to swap into an Ace that's showing
+      const al = alive(), k = al.indexOf(H.turn), nb = al[k + 1];
+      synAct(S.seats[H.turn], rank(H.cards[H.turn]) >= 6 || (nb !== undefined && H.shown[nb]) ? 'keep' : 'swap'); ch = 1;
+    }
     else if (botAt && t >= botAt && live()) {
       const n = S.seats[H.turn], p = S.players[n], need = H.cur - H.bet[H.turn];
       const opts = need > 0 ? ['fold', 'call', 'raise'] : ['call', 'raise'], a = opts[random() * opts.length | 0];
@@ -367,7 +375,7 @@ function createTable(saved, {now = Date.now, random = Math.random, shuffle = cry
     if (!botDeal) botDealAt = 0; else if (!botDealAt) botDealAt = t + BOT_DELAY; else if (t >= botDealAt && !startHand()) { botDealAt = 0; ch = 1 }
     // turn clock ran out: check if possible, else fold; the third miss in a row stands them up
     if (live() && syn() && S.hand.dl && t >= S.hand.dl) {
-      const H = S.hand, n = S.seats[H.turn]; synAct(n, 'keep'); if (H.stage == 'play') H.msg = n + ' keeps (out of time)'; ch = 1;
+      const H = S.hand, n = S.seats[H.turn], ace = holdsAce(H.turn); synAct(n, 'keep'); if (H.stage == 'play') H.msg = n + (ace ? ' keeps' : ' keeps (out of time)'); ch = 1;
     }
     else if (live() && S.hand.dl && t >= S.hand.dl) {
       const H = S.hand, n = S.seats[H.turn], p = S.players[n], need = H.cur - H.bet[H.turn];
