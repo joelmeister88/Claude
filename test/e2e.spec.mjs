@@ -62,7 +62,7 @@ ok(Object.keys(P.last().s.players).length == 2, 'non-host cannot run host action
 await X.ctx.close();
 
 // Bot 1 holds the button and deals by itself; Pat gets only their own cards
-await P.p.waitForSelector('text=Peek', {timeout: 10000});
+await P.p.waitForSelector('text=Peek', {timeout: 20000});
 ok(P.last().s.seats[P.last().s.hand.btn] == 'Bot 1', 'the bot dealer dealt');
 ok(await P.p.$eval('.st .d', e => e.closest('.st').textContent.includes('Bot 1')), 'D marks the dealer\'s seat');
 const leaks = P.frames.filter(f => f.t == 'state' && f.s.hand).some(f => {
@@ -84,7 +84,7 @@ async function checkTurn() {
   if (await P.p.$('#rt')) ok(await P.p.getAttribute('#rt', 'step') == String(P.last().s.bb), 'raise box steps by the big blind');
   turnChecked = true;
 }
-await P.p.waitForFunction(() => document.querySelector('[data-a=fold]') || document.querySelector('#main').textContent.includes("You're the dealer"), null, {timeout: 10000});
+await P.p.waitForFunction(() => document.querySelector('[data-a=fold]') || document.querySelector('#main').textContent.includes("You're the dealer"), null, {timeout: 20000});
 if (await P.p.$('[data-a=fold]')) { await checkTurn(); await P.p.click('[data-a=fold]') }
 
 // the button moves left to Pat, who deals after the 10s pause with blinds of their choosing
@@ -118,7 +118,7 @@ await P.p.click('[data-a=deal]');
 await P.p.waitForFunction(() => document.querySelector('.info')?.textContent.includes('Pot 60'), null, {timeout: 3000}).catch(() => {});
 for (let k = 0; k < 30 && !(P.last().s.hand && !P.last().s.hand.done && P.last().s.sb == 20); k++) await P.p.waitForTimeout(100);
 ok(P.last().s.hand && !P.last().s.hand.done && P.last().s.sb == 20 && P.last().s.hand.cur >= 40, 'dealer deals with their blinds');
-if (!turnChecked) { await P.p.waitForSelector('[data-a=fold]', {timeout: 5000}); await checkTurn() }
+if (!turnChecked) { await P.p.waitForSelector('[data-a=fold]', {timeout: 15000}); await checkTurn() }
 
 // Pat stands up; everyone sees them in "Not at the table"
 await P.p.click('button:text-is("Stand Up")');
@@ -146,6 +146,16 @@ ok(!Y.last().s.known.includes('Bot 1'), 'bots are not in the name history');
 await Y.p.click('text=Admin');
 await Y.p.fill('#ak', 'wrong'); await Y.p.click('text=Unlock'); await Y.p.waitForTimeout(300);
 ok((await errText(Y.p)).includes('Wrong'), 'wrong admin password is refused');
+// guessing: a burst of wrong passwords from one address locks it out, even for the right one
+const replies = await new Promise(done => {
+  const w = new WebSocket(`ws://localhost:${PORT}/ws`), out = [];
+  w.onmessage = e => { const m = JSON.parse(e.data); if (m.t == 'err' || m.t == 'adminok') out.push(m.t == 'err' ? m.msg : 'ok') };
+  w.onopen = async () => { for (const k of ['1', '2', '3', '4', '5', KEY]) { w.send(JSON.stringify({t: 'admin', key: k})); await new Promise(r => setTimeout(r, 50)) } setTimeout(() => { w.close(); done(out) }, 300) };
+});
+ok(replies.slice(0, 4).every(r => r.includes('Wrong')) && replies[4].includes('15 minutes'), '5 wrong passwords lock that address out');
+ok(replies[5].includes('15 minutes'), 'even the right password waits out the lockout');
+await stop(); await start(); await Y.p.reload(); await Y.p.waitForSelector('button:text-is("Sit Down")');
+await Y.p.click('text=Admin');
 await Y.p.fill('#ak', KEY); await Y.p.click('text=Unlock');
 await Y.p.click('text=Become host');
 await Y.p.waitForSelector('text=+ Bot');

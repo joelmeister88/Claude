@@ -10,7 +10,7 @@ const GAMES = {
   syn: {name: 'Screw Your Neighbor', ready: true, blurb: 'One card each: keep it or swap left. Lowest card loses a life; last one standing takes the pot.'},
 };
 const HN = ['High card', 'Pair', 'Two pair', 'Trips', 'Straight', 'Flush', 'Full house', 'Quads', 'Straight flush'];
-const LIVES = 4, REVEAL = 5000, AGAIN = 30000, WAIT = 10000, BUST = 30000, TURN = 30000, DEAL = 120000, MISSES = 3, BOT_DELAY = 1300, SEATS = 12;
+const LIVES = 4, REVEAL = 5000, AGAIN = 30000, WAIT = 10000, BUST = 30000, TURN = 30000, DEAL = 120000, MISSES = 3, BOT_DELAY = 5000, SEATS = 12;
 
 // ---------- hand evaluation (cards are 0..51: rank c%13, 0='2'..12='A'; suit c/13) ----------
 function s5(c) {
@@ -58,7 +58,7 @@ function createTable(saved, {now = Date.now, random = Math.random, shuffle = cry
   S.dealDl = 0; delete S.pausedAt; S.queue = S.queue || []; S.ante = S.ante || 100;
   // name history: everyone who has played here, bots excluded
   for (const n in S.players) if (!S.players[n].bot && !S.known[n]) S.known[n] = 1;
-  let botAt = 0;
+  let botAt = 0, botDealAt = 0;
 
   function changed() {
     S.n++; tidy(); queueUpkeep(); dealerUpkeep(); freezeUpkeep();
@@ -105,7 +105,7 @@ function createTable(saved, {now = Date.now, random = Math.random, shuffle = cry
       // push every deadline back by however long the clocks were frozen
       const d = now() - S.frozenAt, H = S.hand; S.frozenAt = 0;
       if (S.wait) S.wait += d; if (S.dealDl) S.dealDl += d; for (const n in S.bust) S.bust[n] += d;
-      if (H && H.dl) H.dl += d; if (H && H.nextAt) H.nextAt += d; if (S.again) S.again.until += d; if (botAt) botAt += d;
+      if (H && H.dl) H.dl += d; if (H && H.nextAt) H.nextAt += d; if (botDealAt) botDealAt += d; if (S.again) S.again.until += d; if (botAt) botAt += d;
     }
   }
   function stand(n) { const i = S.seats.indexOf(n); if (i >= 0) S.seats[i] = ''; delete S.leave[n]; delete S.bust[n]; delete S.buy[n]; if (S.players[n]) S.players[n].miss = 0 }
@@ -362,8 +362,9 @@ function createTable(saved, {now = Date.now, random = Math.random, shuffle = cry
       ch = 1;
     }
     // a bot dealer deals on its own, as long as a person is playing
-    if (canDeal() && S.dealer >= 0 && S.players[S.seats[S.dealer]].bot && t >= S.wait + BOT_DELAY &&
-        S.seats.some(n => n && !S.players[n].bot && S.players[n].chips > 0) && !startHand()) ch = 1;
+    // (it thinks for 5 seconds from the moment it could deal)
+    const botDeal = canDeal() && t >= S.wait && S.dealer >= 0 && S.players[S.seats[S.dealer]].bot && S.seats.some(n => n && !S.players[n].bot && S.players[n].chips > 0);
+    if (!botDeal) botDealAt = 0; else if (!botDealAt) botDealAt = t + BOT_DELAY; else if (t >= botDealAt && !startHand()) { botDealAt = 0; ch = 1 }
     // turn clock ran out: check if possible, else fold; the third miss in a row stands them up
     if (live() && syn() && S.hand.dl && t >= S.hand.dl) {
       const H = S.hand, n = S.seats[H.turn]; synAct(n, 'keep'); if (H.stage == 'play') H.msg = n + ' keeps (out of time)'; ch = 1;

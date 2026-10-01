@@ -59,13 +59,23 @@ function sendState(c, on = online()) {
 function broadcast() { const on = online(); for (const c of clients) sendState(c, on) }
 // the first person to show up runs the table
 function claimHost(c) { if (!auth[hostToken] && c.name) { hostToken = c.token; persist() } }
+// admin password tries, per address: 5 wrong in a row locks that address out for 15 minutes
+const tries = new Map(), LOCK = 15 * 60000;
+function tryKey(c, k) {
+  const t = tries.get(c.ip) || {n: 0, until: 0};
+  if (Date.now() < t.until) return 'locked';
+  if (keyOk(k)) { tries.delete(c.ip); return 'ok' }
+  if (++t.n >= 5) { t.n = 0; t.until = Date.now() + LOCK }
+  tries.set(c.ip, t); return t.until > Date.now() ? 'locked' : 'wrong';
+}
 const keyOk = k => typeof k == 'string' && k.length == HOST_KEY.length && crypto.timingSafeEqual(Buffer.from(k), Buffer.from(HOST_KEY));
 // names are shown to everyone: letters, digits, spaces and a little punctuation only
 const cleanName = n => String(n || '').normalize('NFC').replace(/[^\p{L}\p{N} _.'-]/gu, '').replace(/\s+/g, ' ').trim().slice(0, 12);
 const isBotName = n => /^bot \d+$/i.test(n);
 
-wss.on('connection', ws => {
-  const c = {ws, token: '', name: '', admin: false, alive: true, hits: 0, fails: 0};
+wss.on('connection', (ws, req) => {
+  const ip = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.socket.remoteAddress;
+  const c = {ws, ip, token: '', name: '', admin: false, alive: true, hits: 0};
   clients.add(c);
   ws.on('pong', () => c.alive = true);
   ws.on('close', () => { clients.delete(c); if (c.name) broadcast() });
@@ -76,15 +86,16 @@ wss.on('connection', ws => {
     const err = msg => send(c, {t: 'err', msg});
     if (m.t == 'hello') {
       if (typeof m.token == 'string' && auth[m.token]) { c.token = m.token; c.name = auth[m.token] }
-      c.admin = keyOk(m.hostKey);
+      c.admin = !!m.hostKey && tryKey(c, m.hostKey) == 'ok';
       if (m.hostKey && !c.admin) send(c, {t: 'badkey'});
       claimHost(c); if (c.name) table.remember(c.name);
       return broadcast();
     }
     if (m.t == 'admin') {
       if (m.key !== undefined) {
-        if (++c.fails > 5) return err('Too many tries, reload the page');
-        if (!keyOk(m.key)) return err('Wrong admin password');
+        const r = tryKey(c, m.key);
+        if (r == 'locked') return err('Too many wrong tries. Try again in 15 minutes.');
+        if (r != 'ok') return err('Wrong admin password');
         c.admin = true; send(c, {t: 'adminok', key: m.key}); return sendState(c);
       }
       if (!c.admin) return err('Admin only');

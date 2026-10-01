@@ -34,7 +34,7 @@ New players are asked for their first name and last initial. Returning players t
 | Env | Default | |
 |---|---|---|
 | `PORT` | `3000` | |
-| `HOST_KEY` | generated | the admin password |
+| `HOST_KEY` | generated | the admin password (5 wrong tries from one address lock it out for 15 minutes) |
 | `DATA_FILE` | `data/table.json` | chip ledger, seats and device logins, saved after every change |
 
 ## Deploy

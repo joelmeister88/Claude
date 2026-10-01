@@ -101,7 +101,7 @@ test('bots play hundreds of hands without creating or losing chips', () => {
     const total = () => Object.values(t.state().players).reduce((a, p) => a + p.chips, 0) + (t.state().hand && !t.state().hand.done ? Object.values(t.state().hand.tot).reduce((a, b) => a + b, 0) : 0);
     while (!t.host({op: 'start'})) {
       hands++;
-      for (let g = 0; g < 500 && !t.state().hand.done; g++) { c.t += 1500; t.tick(); assert.equal(total(), 6000) }
+      for (let g = 0; g < 500 && !t.state().hand.done; g++) { c.t += 5000; t.tick(); assert.equal(total(), 6000) }
       assert.equal(t.state().hand.done, 1, 'hand finished');
       c.t += 10000; t.tick();
     }
@@ -183,7 +183,8 @@ test('a bot dealer deals by itself when a person is playing', () => {
   t.host({op: 'bot'}); t.host({op: 'bot'});
   c.t += 5000; t.tick(); assert.ok(!t.state().hand, 'bots alone do not start');
   t.player('Ann', {t: 'sit'}); t.host({op: 'seat', name: 'Ann'});
-  c.t += 2000; t.tick();
+  t.tick(); c.t += 4999; t.tick(); assert.ok(!t.state().hand, 'bots take 5 seconds');
+  c.t += 1; t.tick();
   assert.ok(t.state().hand && !t.state().hand.done);
 });
 
@@ -374,7 +375,7 @@ test('Screw Your Neighbor: bots play many games without creating or losing chips
     const start = total();
     for (let k = 0; k < 5 && !t.host({op: 'start'}); k++) {
       games++;
-      for (let g = 0; g < 5000 && !t.state().hand.done; g++) { c.t += 1500; t.tick(); assert.equal(total(), start) }
+      for (let g = 0; g < 5000 && !t.state().hand.done; g++) { c.t += 5000; t.tick(); assert.equal(total(), start) }
       assert.equal(t.state().hand.done, 1, 'game finished');
       c.t += 10000; t.tick();
     }
