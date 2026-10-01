@@ -77,7 +77,8 @@ const cleanName = n => String(n || '').normalize('NFC').replace(/[^\p{L}\p{N} _.
 const isBotName = n => /^bot \d+$/i.test(n);
 
 wss.on('connection', (ws, req) => {
-  const ip = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.socket.remoteAddress;
+  // behind Render's proxy the last X-Forwarded-For entry is the one the proxy added (earlier ones can be faked)
+  const ip = String(req.headers['x-forwarded-for'] || '').split(',').pop().trim() || req.socket.remoteAddress;
   const c = {ws, ip, token: '', name: '', admin: false, alive: true, hits: 0};
   clients.add(c);
   ws.on('pong', () => c.alive = true);

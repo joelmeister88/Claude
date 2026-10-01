@@ -4,6 +4,7 @@ import {spawn} from 'child_process';
 import {mkdtempSync} from 'fs';
 import {tmpdir} from 'os';
 import {join} from 'path';
+import WS from 'ws';
 const root = new URL('..', import.meta.url).pathname, data = join(mkdtempSync(join(tmpdir(), 'poker-')), 'table.json');
 const PORT = 3000 + Math.floor(Math.random() * 1000), URL_ = `http://localhost:${PORT}/`, KEY = 'K+Kj/SW=x9';
 let fails = 0; const ok = (c, m) => { console.log((c ? 'PASS ' : 'FAIL ') + m); if (!c) fails++ };
@@ -162,12 +163,18 @@ await Y.p.fill('#ak', 'wrong'); await Y.p.click('text=Unlock'); await Y.p.waitFo
 ok((await errText(Y.p)).includes('Wrong'), 'wrong admin password is refused');
 // guessing: a burst of wrong passwords from one address locks it out, even for the right one
 const replies = await new Promise(done => {
-  const w = new WebSocket(`ws://localhost:${PORT}/ws`), out = [];
+  // from an address of its own, so another tab logging in can't reset the count mid-test
+  const w = new WS(`ws://localhost:${PORT}/ws`, {headers: {'x-forwarded-for': '198.51.100.7, 203.0.113.9'}}), out = [];
   w.onmessage = e => { const m = JSON.parse(e.data); if (m.t == 'err' || m.t == 'adminok') out.push(m.t == 'err' ? m.msg : 'ok') };
   w.onopen = async () => { for (const k of ['1', '2', '3', '4', '5', KEY]) { w.send(JSON.stringify({t: 'admin', key: k})); await new Promise(r => setTimeout(r, 50)) } setTimeout(() => { w.close(); done(out) }, 300) };
 });
 ok(replies.slice(0, 4).every(r => r.includes('Wrong')) && replies[4].includes('15 minutes'), '5 wrong passwords lock that address out');
 ok(replies[5].includes('15 minutes'), 'even the right password waits out the lockout');
+{ // a faked first address doesn't dodge the lockout
+  const w = new WS(`ws://localhost:${PORT}/ws`, {headers: {'x-forwarded-for': '10.9.9.9, 203.0.113.9'}});
+  const r = await new Promise(done => { w.on('message', d => { const m = JSON.parse(d); if (m.t == 'err') { w.close(); done(m.msg) } }); w.on('open', () => w.send(JSON.stringify({t: 'admin', key: '0000'}))) });
+  ok(r.includes('15 minutes'), 'a faked forwarding address does not get around the lockout');
+}
 await stop(); await start(); await Y.p.reload(); await Y.p.waitForSelector('button:text-is("Sit Down")');
 await Y.p.click('text=Admin');
 await Y.p.fill('#ak', KEY); await Y.p.click('text=Unlock');
@@ -209,7 +216,7 @@ ok((await Y.p.textContent('#lobby')).includes('1. Zoe'), 'everyone sees the wait
 ok(await Z.p.$$eval('.st', e => e.length) == 12, 'people in line can watch the table');
 await Y.p.click('[data-a=rmbot][data-v="Bot 3"]');
 await Z.p.waitForSelector('text=Seat requested');
-ok(await Y.p.$eval('#host .p', e => e.classList.contains('turn')), 'an open seat goes to the front of the line, and the host is alerted');
+ok(await Y.p.waitForFunction(() => document.querySelector('#host .p').classList.contains('turn'), null, {timeout: 3000}).then(() => 1, () => 0), 'an open seat goes to the front of the line, and the host is alerted');
 ok(!H.errs.length && !P.errs.length && !Y.errs.length, 'no page errors ' + H.errs.concat(P.errs, Y.errs).join('|'));
 await browser.close(); await stop();
 console.log(fails ? fails + ' failing' : 'all passed'); process.exit(fails ? 1 : 0);
