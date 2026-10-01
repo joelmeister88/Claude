@@ -6,7 +6,7 @@ const crypto = require('crypto');
 
 const GAMES = {holdem: {name: "Texas Hold'em", hole: 2}};
 const HN = ['High card', 'Pair', 'Two pair', 'Trips', 'Straight', 'Flush', 'Full house', 'Quads', 'Straight flush'];
-const WAIT = 10000, BUST = 30000, BOT_DELAY = 1300, SEATS = 12;
+const WAIT = 10000, BUST = 30000, TURN = 30000, MISSES = 3, BOT_DELAY = 1300, SEATS = 12;
 
 // ---------- hand evaluation (cards are 0..51: rank c%13, 0='2'..12='A'; suit c/13) ----------
 function s5(c) {
@@ -44,12 +44,16 @@ const int = v => { const x = Math.floor(+v); return Number.isFinite(x) ? x : NaN
  */
 function createTable(saved, {now = Date.now, random = Math.random, shuffle = cryptoShuffle, onChange = () => {}} = {}) {
   const S = Object.assign(fresh(), saved || {});
+  // a restart shouldn't time out whoever was mid-decision
+  if (S.hand && !S.hand.done) S.hand.dl = now() + TURN;
   let botAt = 0;
 
   function changed() {
     S.n++; tidy();
     const H = S.hand, p = H && !H.done && S.players[S.seats[H.turn]];
     botAt = p && p.bot ? now() + BOT_DELAY : 0;
+    // each new decision gets a fresh 30s turn clock (bots move on their own timer)
+    if (H && !H.done) { const key = H.turn + ':' + (H.nact || 0); if (H.dlKey !== key) { H.dlKey = key; H.dl = p && !p.bot ? now() + TURN : 0 } }
     onChange();
   }
   const freeSeat = () => { for (let k = 1; k <= SEATS; k++) { const i = ((S.last ?? -1) + k + SEATS) % SEATS; if (!S.seats[i]) return i } return -1 };
@@ -61,7 +65,7 @@ function createTable(saved, {now = Date.now, random = Math.random, shuffle = cry
     for (const n of Object.keys(S.bust).concat(Object.keys(S.buy)))
       if (!S.seats.includes(n) || S.players[n].chips > 0) { delete S.bust[n]; delete S.buy[n] }
   }
-  function stand(n) { const i = S.seats.indexOf(n); if (i >= 0) S.seats[i] = ''; delete S.leave[n]; delete S.bust[n]; delete S.buy[n] }
+  function stand(n) { const i = S.seats.indexOf(n); if (i >= 0) S.seats[i] = ''; delete S.leave[n]; delete S.bust[n]; delete S.buy[n]; if (S.players[n]) S.players[n].miss = 0 }
   // standing up mid-hand: fold when the action reaches them, leave the seat when the hand ends
   function standOrLeave(n) { if (inLiveHand(n)) { S.leave[n] = 1; autoFold() } else stand(n) }
 
@@ -125,7 +129,7 @@ function createTable(saved, {now = Date.now, random = Math.random, shuffle = cry
         H.cur = to; H.acted = {}; post(t, to - b); H.msg = n + (H.allin[t] ? ' is all-in ' : ' raises to ') + to;
       }
     }
-    H.acted[t] = 1; adv(); autoFold();
+    H.acted[t] = 1; H.nact = (H.nact || 0) + 1; adv(); autoFold();
   }
   function autoFold() { const H = S.hand; if (live() && S.leave[S.seats[H.turn]]) act(S.seats[H.turn], 'fold') }
 
@@ -138,7 +142,7 @@ function createTable(saved, {now = Date.now, random = Math.random, shuffle = cry
     else if (m.t == 'unsit') delete S.pend[n];
     else if (m.t == 'stand') { if (!seated) return; standOrLeave(n) }
     else if (m.t == 'buy') { if (!seated) return; delete S.bust[n]; S.buy[n] = 1 }
-    else if (m.t == 'act') { if (!live() || S.seats[S.hand.turn] !== n) return 'Not your turn'; act(n, m.a, m.amt) }
+    else if (m.t == 'act') { if (!live() || S.seats[S.hand.turn] !== n) return 'Not your turn'; S.players[n].miss = 0; act(n, m.a, m.amt) }
     else return;
     changed();
   }
@@ -179,6 +183,15 @@ function createTable(saved, {now = Date.now, random = Math.random, shuffle = cry
       const opts = need > 0 ? ['fold', 'call', 'raise'] : ['call', 'raise'], a = opts[random() * opts.length | 0];
       act(n, a, H.cur + H.minR * (1 + (random() * 4 | 0)) + (random() < .1 ? p.chips : 0)); ch = 1;
     }
+    // turn clock ran out: check if possible, else fold; the third miss in a row stands them up
+    if (live() && H.dl && t >= H.dl) {
+      const n = S.seats[H.turn], p = S.players[n], need = H.cur - H.bet[H.turn];
+      p.miss = (p.miss || 0) + 1; const out = p.miss >= MISSES;
+      act(n, need > 0 ? 'fold' : 'call');
+      if (out) standOrLeave(n);
+      if (live()) H.msg = n + (out ? ' timed out 3 times and will stand up' : (need > 0 ? ' folds' : ' checks') + ' (out of time)');
+      ch = 1;
+    }
     if (ch) changed();
   }
   /** What one viewer may see: no deck, and hole cards only for themselves (and live hands at showdown). */
@@ -196,4 +209,4 @@ function createTable(saved, {now = Date.now, random = Math.random, shuffle = cry
   return {state: () => S, view, player, host, tick};
 }
 
-module.exports = {createTable, best, s5, category, WAIT, BUST, SEATS};
+module.exports = {createTable, best, s5, category, WAIT, BUST, TURN, SEATS};

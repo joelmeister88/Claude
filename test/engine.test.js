@@ -109,3 +109,44 @@ test('bots play hundreds of hands without creating or losing chips', () => {
   }
   assert.ok(hands > 200, 'played ' + hands + ' hands');
 });
+
+// three seated humans, fresh hand: A is button, B small blind, C big blind, A first to act
+function threeHanded(c) {
+  const t = createTable(null, {now: c});
+  for (const n of ['A', 'B', 'C']) { t.player(n, {t: 'sit'}); t.host({op: 'seat', name: n}) }
+  t.host({op: 'start'}); return t;
+}
+const turnName = t => t.state().seats[t.state().hand.turn];
+
+test('30s turn clock: folds facing a bet, checks when free', () => {
+  const c = clock(), t = threeHanded(c), first = turnName(t);
+  assert.equal(t.view(first).hand.dl, c.t + 30000);
+  c.t += 29999; t.tick(); assert.equal(turnName(t), first);
+  c.t += 1; t.tick();
+  const s = t.state(); assert.equal(s.hand.fold[s.seats.indexOf(first)], 1, 'facing the big blind: fold');
+  assert.match(s.hand.msg, /folds \(out of time\)/);
+  // small blind calls, big blind may check: let the big blind's clock run out
+  t.player(turnName(t), {t: 'act', a: 'call'});
+  const bb = turnName(t), before = t.state().hand.stage;
+  c.t += 30000; t.tick();
+  assert.ok(!t.state().hand.fold[t.state().seats.indexOf(bb)], 'no bet to call: check, not fold');
+  assert.equal(t.state().hand.stage, before + 1, 'check closed the round');
+});
+
+test('three timeouts in a row stand a player up; acting resets the count', () => {
+  const c = clock(), t = threeHanded(c), slow = turnName(t);
+  t.state().players[slow].miss = 2;
+  t.player(slow, {t: 'act', a: 'call'});
+  assert.equal(t.state().players[slow].miss, 0, 'acting resets the count');
+  // from here everyone else calls and `slow` only ever lets the clock run out
+  let outs = 0;
+  for (let g = 0; g < 2000 && t.state().seats.includes(slow); g++) {
+    const H = t.state().hand;
+    if (H.done) { c.t += 10000; t.tick(); t.host({op: 'start'}) }
+    else if (turnName(t) !== slow) t.player(turnName(t), {t: 'act', a: 'call'});
+    else { c.t += 30000; t.tick(); outs++ }
+  }
+  assert.equal(outs, 3, 'stood up after the third timeout in a row');
+  assert.ok(t.state().players[slow].chips > 0, 'chips kept');
+  assert.equal(t.state().players[slow].miss, 0, 'count starts over if they sit back down');
+});

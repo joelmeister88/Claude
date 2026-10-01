@@ -16,7 +16,7 @@ async function stop() { await new Promise(r => setTimeout(r, 500)); srv.kill(); 
 await start();
 const browser = await chromium.launch({executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome'});
 async function player(name, hash = '') {
-  const ctx = await browser.newContext(), p = await ctx.newPage(), errs = [], frames = [];
+  const ctx = await browser.newContext({viewport: {width: 390, height: 844}, isMobile: true, hasTouch: true}), p = await ctx.newPage(), errs = [], frames = [];
   p.on('pageerror', e => errs.push(e.message));
   p.on('websocket', ws => ws.on('framereceived', f => { try { frames.push(JSON.parse(f.payload)) } catch (e) {} }));
   await p.goto(URL_ + hash);
@@ -63,6 +63,14 @@ ok(mine.every(c => Number.isInteger(c)), 'player receives their own two cards');
 ok((await P.p.$$('#main .c.lg.b')).length == 2, 'own cards are face down until Peek');
 await P.p.click('text=Peek');
 ok((await P.p.$$('#main .c.lg.b')).length == 0, 'Peek shows them');
+await P.p.click('text=Hide now');
+ok((await P.p.$$('#main .c.lg.b')).length == 2, 'Hide now hides them right away');
+await P.p.click('text=Peek'); await P.p.waitForTimeout(3300);
+ok((await P.p.$$('#main .c.lg.b')).length == 2 && await P.p.isVisible('text=Peek 3s'), 'cards hide again after 3s');
+await P.p.waitForSelector('[data-a=fold]', {timeout: 10000});
+ok(await P.p.$eval('#main .p', e => e.classList.contains('turn') && getComputedStyle(e).backgroundColor != 'rgb(255, 255, 255)'), 'panel turns red on your turn');
+ok(/^(2\d|30)s$/.test(await P.p.textContent('.clock')), 'turn clock shows ~30s');
+ok(await P.p.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'no sideways scrolling');
 
 // Pat folds when it's their turn; the hand ends (heads-up vs the bot) or continues
 await P.p.waitForSelector('[data-a=fold]', {timeout: 10000}).then(() => P.p.click('[data-a=fold]')).catch(() => {});
