@@ -43,7 +43,10 @@ await P.p.click('text=Share');
 ok(await P.p.evaluate(() => navigator.clipboard.readText()) == URL_, 'Share copies just the link');
 await P.p.click('button:text-is("Sit Down")');
 await H.p.waitForSelector('text=Seat requests');
+ok(await H.p.$eval('#host .p', e => e.classList.contains('turn')), 'host panel turns red when someone wants a seat');
+ok((await P.p.textContent('#main')).includes('Waiting for the host to seat Pat'), 'everyone sees the table is waiting on the host');
 await H.p.click('[data-a=ok]');
+await H.p.waitForFunction(() => !document.querySelector('#host .p').classList.contains('turn'));
 await P.p.waitForSelector('button:text-is("Stand Up")');
 ok(true, 'host approves a seat');
 

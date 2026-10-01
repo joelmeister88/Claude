@@ -48,13 +48,13 @@ function createTable(saved, {now = Date.now, random = Math.random, shuffle = cry
   const S = Object.assign(fresh(), saved || {});
   // a restart shouldn't time out whoever was mid-decision
   if (S.hand && !S.hand.done) S.hand.dl = now() + TURN;
-  S.dealDl = 0;
+  S.dealDl = 0; delete S.pausedAt;
   // name history: everyone who has played here, bots excluded
   for (const n in S.players) if (!S.players[n].bot && !S.known[n]) S.known[n] = 1;
   let botAt = 0;
 
   function changed() {
-    S.n++; tidy(); dealerUpkeep();
+    S.n++; tidy(); dealerUpkeep(); freezeUpkeep();
     const H = S.hand, p = H && !H.done && S.players[S.seats[H.turn]];
     botAt = p && p.bot ? now() + BOT_DELAY : 0;
     // each new decision gets a fresh 30s turn clock (bots move on their own timer)
@@ -81,6 +81,18 @@ function createTable(saved, {now = Date.now, random = Math.random, shuffle = cry
     if (!canDeal()) S.dealDl = 0;
     else if (!S.dealDl) S.dealDl = Math.max(now(), S.wait) + DEAL;
   }
+  // ---------- frozen clocks: the host's Pause, or someone waiting for the host to seat them ----------
+  const holdReason = () => S.paused ? 'host' : Object.keys(S.pend).length ? 'seats' : '';
+  function freezeUpkeep() {
+    const want = !!holdReason();
+    if (want && !S.frozenAt) S.frozenAt = now();
+    else if (!want && S.frozenAt) {
+      // push every deadline back by however long the clocks were frozen
+      const d = now() - S.frozenAt, H = S.hand; S.frozenAt = 0;
+      if (S.wait) S.wait += d; if (S.dealDl) S.dealDl += d; for (const n in S.bust) S.bust[n] += d;
+      if (H && H.dl) H.dl += d; if (botAt) botAt += d;
+    }
+  }
   function stand(n) { const i = S.seats.indexOf(n); if (i >= 0) S.seats[i] = ''; delete S.leave[n]; delete S.bust[n]; delete S.buy[n]; if (S.players[n]) S.players[n].miss = 0 }
   // standing up mid-hand: fold when the action reaches them, leave the seat when the hand ends
   function standOrLeave(n) { if (inLiveHand(n)) { S.leave[n] = 1; autoFold() } else stand(n) }
@@ -92,6 +104,7 @@ function createTable(saved, {now = Date.now, random = Math.random, shuffle = cry
     if (live()) return 'Hand in progress';
     const o = owed(); if (o.length) return 'Waiting on ' + o.join(', ') + ' to get chips or stand up';
     if (now() < S.wait) return 'Next hand can be dealt in a moment';
+    const p = Object.keys(S.pend); if (p.length) return 'Waiting for the host to seat ' + p.join(', ');
     const g = GAMES[S.game], nb = S.dealer >= 0 && eligible(S.dealer) ? S.dealer : nextEligible(S.btn);
     const ps = []; for (let k = 1; k <= SEATS; k++) { const i = (nb + k) % SEATS, n = S.seats[i]; if (n && S.players[n].chips > 0) ps.push(i) }
     if (ps.length < 2) return 'Need at least 2 seated players with chips';
@@ -191,23 +204,14 @@ function createTable(saved, {now = Date.now, random = Math.random, shuffle = cry
       case 'adj': { const x = int(m.x); if (!x) return; if (inLiveHand(n)) return 'Wait until this hand ends'; p.chips = Math.max(0, p.chips + x); break }
       case 'kick': standOrLeave(n); break;
       case 'blinds': { const bb = int(m.bb), e = blindError(bb); if (e) return e; S.sb = bb / 2; S.bb = bb; break }
-      case 'pause': {
-        // freeze every clock; on resume, push each deadline back by however long we were paused
-        if (m.on && !S.paused) { S.paused = 1; S.pausedAt = now() }
-        else if (!m.on && S.paused) {
-          const d = now() - S.pausedAt, H = S.hand; S.paused = 0; S.pausedAt = 0;
-          if (S.wait) S.wait += d; if (S.dealDl) S.dealDl += d; for (const n in S.bust) S.bust[n] += d;
-          if (H && H.dl) H.dl += d; if (botAt) botAt += d;
-        }
-        break;
-      }
+      case 'pause': S.paused = m.on ? 1 : 0; break;
       default: return;
     }
     changed();
   }
   /** Timers: bust deadlines and bot moves. Call a few times a second. */
   function tick() {
-    if (S.paused) return;
+    if (S.frozenAt) return;
     let ch = 0; const t = now();
     for (const n in S.bust) if (t >= S.bust[n]) { stand(n); ch = 1 }
     const H = S.hand;
@@ -257,7 +261,7 @@ function createTable(saved, {now = Date.now, random = Math.random, shuffle = cry
     const players = {}; for (const n in S.players) players[n] = {chips: S.players[n].chips, bot: !!S.players[n].bot};
     return {players, seats: S.seats, pend: S.pend, leave: S.leave, bust: S.bust, buy: S.buy, wait: S.wait, hand,
       btn: S.btn, dealer: S.dealer, dealDl: S.dealDl, sb: S.sb, bb: S.bb, game: S.game, gameName: GAMES[S.game].name, n: S.n,
-      paused: S.paused ? S.pausedAt : 0,
+      paused: S.frozenAt || 0, hold: holdReason(),
       known: Object.keys(S.known).sort((a, b) => S.known[b] - S.known[a])};
   }
   return {state: () => S, view, player, host, tick, remember, forget, reset};

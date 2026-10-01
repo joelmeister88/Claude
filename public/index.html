@@ -37,7 +37,7 @@ small,.m{opacity:.7}h4{margin:8px 0 2px}
 <script>
 'use strict';
 const $=s=>document.querySelector(s),SU='♠♥♦♣',RK='  23456789TJQKA';
-let ws,S=null,me='',token='',hostKey='',host=false,admin=false,renaming=false,showKey=false,arm='',dbb=0,lastDeal=0,off=0,rt=0,peekT=0,snd=true,AC,lastN=-1,addAmt={},adjFor='',noteT,retry=0;
+let ws,S=null,me='',token='',hostKey='',host=false,admin=false,renaming=false,showKey=false,arm='',dbb=0,lastPend=0,lastDeal=0,off=0,rt=0,peekT=0,snd=true,AC,lastN=-1,addAmt={},adjFor='',noteT,retry=0;
 try{token=localStorage.getItem('pn_token')||'';hostKey=localStorage.getItem('pn_host')||''}catch(e){}
 // the admin link is /#host=KEY: remember the key on this device, then drop it from the address bar
 {const m=location.hash.match(/host=([^&]+)/);if(m){try{hostKey=decodeURIComponent(m[1])}catch(e){hostKey=m[1]}try{localStorage.setItem('pn_host',hostKey)}catch(e){}history.replaceState(null,'',location.pathname)}}
@@ -105,7 +105,7 @@ function render(){const m=$('#main');
   me_+=`<div class="row">${S.leave[me]?'<small>Standing up when this hand ends…</small>':`<button class="r" data-a="stand">Stand Up</button>`}${S.buy[me]?'<small>Chip request sent, waiting for host…</small>':'<button data-a="buy">Get more chips</button>'}</div>`;
   if(inH&&!H.done&&!S.leave[me])me_+='<small>Standing up mid-hand folds your cards.</small>'}
  const f=document.activeElement;
- if(!(myDeal&&f&&f.id=='dbb'))put(m,`<div class="tbl" style="aspect-ratio:${N<=3?'1/1':N<=7?'6/7':'4/5'}">${seats}<div class="mid">${board}</div><div class="info"><div style="font-size:16px"><i class="ch"></i><b>Pot ${pot}</b></div><div style="font-size:12px">${S.paused?'<b style="color:#ffd54a">⏸ Paused by the host</b><br>':''}${H?esc(H.msg):''}${!live&&S.dealDl&&dealer?`<br><span class="d">D</span>${esc(dealer)} deals next <span data-cd="${S.dealDl}"></span>`:!live&&!S.dealDl?'<br>Waiting for players':''}</div></div></div><div class="p ${(live&&H.turn==my&&my>=0)||myDeal?'turn':''}">${me_}</div>`);
+ if(!(myDeal&&f&&f.id=='dbb'))put(m,`<div class="tbl" style="aspect-ratio:${N<=3?'1/1':N<=7?'6/7':'4/5'}">${seats}<div class="mid">${board}</div><div class="info"><div style="font-size:16px"><i class="ch"></i><b>Pot ${pot}</b></div><div style="font-size:12px">${S.hold=='host'?'<b style="color:#ffd54a">⏸ Paused by the host</b><br>':S.hold=='seats'?`<b style="color:#ffd54a">⏸ Waiting for the host to seat ${esc(Object.keys(S.pend).join(', '))}</b><br>`:''}${H?esc(H.msg):''}${!live&&S.dealDl&&dealer?`<br><span class="d">D</span>${esc(dealer)} deals next <span data-cd="${S.dealDl}"></span>`:!live&&!S.dealDl?'<br>Waiting for players':''}</div></div></div><div class="p ${(live&&H.turn==my&&my>=0)||myDeal?'turn':''}">${me_}</div>`);
  if(myDeal&&lastDeal!==S.dealDl){beep(523,.12);navigator.vibrate&&navigator.vibrate(120)}lastDeal=myDeal?S.dealDl:0;
  if(H&&!H.done&&H.turn==my&&lastN!=S.n){rt=0;beep(660,.12);beep(880,.2,.15);navigator.vibrate&&navigator.vibrate(200)}
  if(H&&H.done&&lastN!=S.n&&lastN>=0){[523,659,784].forEach((f,i)=>beep(f,.15,i*.12))}
@@ -123,8 +123,10 @@ function renderHost(){const e=$('#host'),f=document.activeElement;if(!host)retur
  const bust=Object.keys(S.bust).map(n=>`<div class="row"><b>${esc(n)}</b> is out of chips, deciding… <span data-cd="${S.bust[n]}"></span></div>`).join('');
  const o=owed(),live=H&&!H.done,dn=S.seats[S.dealer],st=live?'Hand in progress':o.length?'Waiting on '+esc(o.join(', ')):dn&&S.dealDl?`Dealer: ${esc(dn)}`:'Waiting for players';
  const led=Object.keys(S.players).map(n=>{const seated=S.seats.includes(n),v=esc(n);return`<div class="row"><span style="flex:1">${v} ${seated?'':'<small>(away)</small>'}</span><b>${S.players[n].chips}</b>${adjFor==n?`<input data-adjin="${v}" type="number" placeholder="±" style="width:80px"><button class="g" data-a="adjok" data-v="${v}">OK</button>`:`<button data-a="adj" data-v="${v}">±</button>`}${S.players[n].bot?`<button data-a="rmbot" data-v="${v}">✕</button>`:seated?`<button data-a="kick" data-v="${v}" title="Stand this player up">⏏</button>`:''}</div>`}).join('');
- put(e,`<div class="p"><b>Host controls</b> <small>${esc(S.gameName)}</small><div class="row"><span style="flex:1">${st}</span><button data-a="pause" ${S.paused?'class="g">▶ Resume':'>⏸ Pause'}</button>${!live&&dn&&S.dealDl?`<button data-a="start" title="Deal for the dealer">Deal now</button>`:''}<button data-a="bot">+ Bot</button></div>
- ${pend?'<h4>Seat requests</h4>'+pend:''}${buy?'<h4>Chip requests</h4>'+buy:''}${bust?'<h4>Out of chips</h4>'+bust:''}<h4>Chip ledger</h4>${led||'<small>No players yet</small>'}</div>`);tick()}
+ // someone waiting for a seat: the clocks are frozen until the host answers, so make it stand out
+ const np=Object.keys(S.pend).length;if(np>lastPend){beep(880,.12);beep(660,.12,.15);navigator.vibrate&&navigator.vibrate([120,80,120])}lastPend=np;
+ put(e,`<div class="p ${np?'turn':''}"><b>Host controls</b> <small>${esc(S.gameName)}</small><div class="row"><span style="flex:1">${st}</span><button data-a="pause" ${S.hold=='host'?'class="g">▶ Resume':'>⏸ Pause'}</button>${!live&&dn&&S.dealDl?`<button data-a="start" title="Deal for the dealer">Deal now</button>`:''}<button data-a="bot">+ Bot</button></div>
+ ${pend?'<h4>Seat requests <small>· timers paused until you answer</small></h4>'+pend:''}${buy?'<h4>Chip requests</h4>'+buy:''}${bust?'<h4>Out of chips</h4>'+bust:''}<h4>Chip ledger</h4>${led||'<small>No players yet</small>'}</div>`);tick()}
 document.addEventListener('click',async e=>{const b=e.target.closest('[data-a]');if(!b)return;const a=b.dataset.a,v=b.dataset.v;
  try{AC=AC||new AudioContext();AC.resume()}catch(x){}
  if(a=='name'){const n=$('#nm').value.trim();if(n)send({t:'name',name:n})}
@@ -153,7 +155,7 @@ document.addEventListener('click',async e=>{const b=e.target.closest('[data-a]')
  else if(a=='hide'){peekT=0;render()}
  else if(!host)return;
  else if(a=='start')hs('start');
- else if(a=='pause')hs('pause',{on:!S.paused});
+ else if(a=='pause')hs('pause',{on:S.hold!='host'});
  else if(a=='ok'){hs('seat',{name:v,add:addAmt[v]});delete addAmt[v]}
  else if(a=='no')hs('noseat',{name:v});
  else if(a=='give'){hs('give',{name:v,add:addAmt[v]??1000});delete addAmt[v]}

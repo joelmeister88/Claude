@@ -215,3 +215,21 @@ test('host pause freezes every clock and resume pushes deadlines back', () => {
   c.t += 29000; t.tick(); assert.equal(s.hand.turn, who);
   c.t += 1001; t.tick(); assert.notEqual(s.hand.turn, who, 'clock runs again');
 });
+
+test('a seat request freezes the clocks and holds the deal until the host answers', () => {
+  const c = clock(), t = createTable(null, {now: c});
+  for (const n of ['A', 'B']) { t.player(n, {t: 'sit'}); t.host({op: 'seat', name: n}) }
+  const s = t.state(), dl = s.dealDl;
+  t.player('Late', {t: 'sit'});
+  assert.equal(t.view('').hold, 'seats');
+  c.t += 120000; t.tick();
+  assert.equal(s.seats[s.dealer], 'A', 'dealer clock frozen');
+  assert.match(t.player('A', {t: 'deal'}), /seat Late/);
+  t.host({op: 'seat', name: 'Late'});
+  assert.equal(t.view('').hold, '');
+  assert.equal(s.dealDl, dl + 120000, 'deadline pushed back by the wait');
+  assert.equal(t.player('A', {t: 'deal'}), undefined);
+  assert.ok(s.hand.ps.length == 3, 'the new player is dealt in');
+  t.player('Later', {t: 'sit'}); t.host({op: 'noseat', name: 'Later'});
+  assert.equal(t.view('').hold, '', 'declining also releases the hold');
+});
