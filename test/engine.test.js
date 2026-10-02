@@ -837,7 +837,8 @@ test('7 Card No Peek: a flipper stops being able to flip once they have the lead
   H.h[a] = h('Ks 3d 5c 6h 7d 8s 9c'); H.h[b] = h('Ah 3c 5d 6s 7h 8c 9d'); H.turn = a; H.stage = 'flip';
   t.player(s.seats[a], {t: 'act', a: 'flip'});
   assert.equal(H.stage, 'bet', 'a King beats the dealer\'s 3: flipping stops and betting starts');
-  assert.ok(t.player(s.seats[a], {t: 'act', a: 'flip'}), 'no more flips once ahead');
+  assert.equal(t.player(s.seats[a], {t: 'act', a: 'flip'}), undefined, 'an extra tap once ahead: no error flash');
+  assert.equal(H.up[a], 1, '... and no more flips once ahead');
   const first = H.turn; assert.equal(first, b);
   assert.equal(t.player(s.seats[b], {t: 'act', a: 'raise', amt: 900}), undefined);
   assert.equal(H.cur, 900, 'bet the whole stack: no cap'); assert.ok(H.allin[b]);
@@ -894,4 +895,20 @@ test('7 Card No Peek: whatever the ante, bets and raises go up in steps of 100',
   assert.equal(H.cur, 100, 'the smallest bet is 100, not the 300 ante');
   t.player(s.seats[H.turn], {t: 'act', a: 'raise', amt: 250});
   assert.equal(H.cur, 200, 'rounded down to a step of 100');
+});
+
+test('7 Card No Peek: the card you tap is the card that flips', () => {
+  const c = clock(), t = createTable(null, {now: c});
+  for (const n of ['A', 'B', 'C']) { t.player(n, {t: 'sit'}); t.host({op: 'seat', name: n}) }
+  const s = t.state(), d = s.seats[s.dealer]; t.player(d, {t: 'game', game: 'nopeek'}); t.player(d, {t: 'deal', ante: 100});
+  const H = s.hand, i = H.turn, n = s.seats[i];
+  t.player(n, {t: 'act', a: 'flip', idx: 4});
+  const seen = t.view('C').hand.h[i];
+  assert.equal(seen[4], H.h[i][4], 'the fifth card is face up');
+  assert.ok(seen.every((x, k) => k == 4 || x === null), 'and only that one');
+  assert.equal(H.sc[i], scoreAny([H.h[i][4]], [0, 2, 8]), 'scored on the cards that are showing');
+  if (H.stage == 'flip' && H.turn === i) {
+    t.player(n, {t: 'act', a: 'flip', idx: 4});                 // tapping it again: flips another one instead
+    assert.equal(t.view('C').hand.h[i].filter(x => x !== null).length, 2);
+  } else assert.equal(t.player(n, {t: 'act', a: 'flip', idx: 1}), undefined, 'an extra tap after taking the lead is quietly ignored');
 });

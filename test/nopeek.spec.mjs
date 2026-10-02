@@ -35,6 +35,12 @@ ok(s.hand.g == 'nopeek' && s.hand.h[s.seats.indexOf('Pat')].every(c => c === nul
 const first = s.seats[s.hand.turn], F = first == 'Hana' ? H : P, O = first == 'Hana' ? P : H;
 await F.p.waitForSelector('.cb.go');
 ok(await O.p.$('.cb.go') == null, 'only the flipper can tap cards');
+{ // tap the third card: the third card is the one that turns over
+  const b = await F.p.$$('.cb.go'); await b[2].click();
+  await F.p.waitForFunction(() => document.querySelectorAll('.cb.go').length < 7 || !document.querySelector('.cb.go'));
+  const mine = F.last().s.hand.h[F.last().s.seats.indexOf(first)];
+  ok(mine[2] !== null && mine.filter(x => x !== null).length == 1, 'the card you tap is the one that flips');
+}
 ok((await P.p.textContent('.mid')).includes('Card to beat'), "the dealer's card is on the table");
 await F.p.click('.cb.go >> nth=0');
 await F.p.waitForFunction(() => document.querySelectorAll('.p .c.nk:not(.b)').length >= 1);

@@ -155,7 +155,7 @@ function render(){const m=$('#main');
    else if(!H.done&&H.stage=='bet')me_+=`<div class="m">Waiting for ${esc(S.seats[H.turn])}… <span data-cd="${H.dl||0}"></span></div>`}
   else if(inH){const pk=Date.now()<peekT,dr=isDraw&&!H.done&&H.stage==1&&H.turn==my,cs=isDraw?'md':'lg',dk=H.id+':'+(H.nact||0);if(dselKey!==dk){dselKey=dk;dsel=[]}
    const nf=isNP&&!H.done&&H.turn==my&&H.stage=='flip';
-   me_+=`<div class="row">${isNP?H.h[my].map((c,k)=>nf&&c==null?`<button class="cb go" data-a="flip" aria-label="Flip card ${k+1}">${ch(null,'nk')}</button>`:ch(c,'nk')).join(''):dr?H.h[my].map((c,k)=>`<button class="cb" data-a="dtog" data-v="${k}" aria-label="Card ${k+1}">${ch(c,cs+(dsel.includes(k)?' sel':''))}</button>`).join(''):H.h[my].map(c=>ch(pk?c:null,cs)).join('')+(pk?'<button data-a="hide">🙈 Hide now</button>':'<button data-a="peek">👁 Peek 3s</button>')}</div>`;
+   me_+=`<div class="row">${isNP?H.h[my].map((c,k)=>nf&&c==null?`<button class="cb go" data-a="flip" data-v="${k}" aria-label="Flip card ${k+1}">${ch(null,'nk')}</button>`:ch(c,'nk')).join(''):dr?H.h[my].map((c,k)=>`<button class="cb" data-a="dtog" data-v="${k}" aria-label="Card ${k+1}">${ch(c,cs+(dsel.includes(k)?' sel':''))}</button>`).join(''):H.h[my].map(c=>ch(pk?c:null,cs)).join('')+(pk?'<button data-a="hide">🙈 Hide now</button>':'<button data-a="peek">👁 Peek 3s</button>')}</div>`;
    if(dr)me_+=`<div class="row"><b>Your turn: swap cards</b> <span class="clock" data-cd="${H.dl||0}"></span></div><small>Tap the cards you want to swap${H.wild>=0?` (★ = wild ${WN(H.wild)}s)`:''}. Swap none to stand pat.</small><div class="row act"><button class="g" data-a="drawgo">${dsel.length?'Swap '+dsel.length+(dsel.length>1?' cards':' card'):'Stand pat'}</button></div>`;
    else if(isNP&&!H.done&&H.turn==my&&H.stage=='flip'){const lb=H.best>=0?`${esc(S.seats[H.best])}'s ${esc(H.cat[H.best])}`:`the dealer's ${cn(H.top)}${[0,2,8].includes(H.top%13)?' (wild: counts as an Ace)':''}`;
     me_+=`<div class="row"><b>Your turn: tap a card to flip it</b> <span class="clock" data-cd="${H.dl||0}"></span></div><div class="note-ok">Beat ${lb}. You stop as soon as you do. A tie doesn't beat it.</div>`}
@@ -216,7 +216,8 @@ document.addEventListener('click',async e=>{const b=e.target.closest('[data-a]')
  else if(a=='btbet'){setBet($('#bta').value,S.hand.pot);send({t:'act',a:'bet',amt:bta})}
  else if(a=='btpass')send({t:'act',a:'pass'});
  else if(a=='keep'||a=='swap')send({t:'act',a});
- else if(a=='flip'||a=='flipall')send({t:'act',a});
+ else if(a=='flip')send({t:'act',a,idx:+v});
+ else if(a=='flipall')send({t:'act',a});
  else if(a=='optin1'||a=='optin0')send({t:'optin',in:a=='optin1'});
  else if(a=='dealmein')send({t:'dealmein'});
  else if(a=='again1'||a=='again0')send({t:'again',yes:a=='again1'});

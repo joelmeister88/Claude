@@ -205,7 +205,7 @@ function createTable(saved, {now = Date.now, random = Math.random, shuffle = cry
     if (S.game == 'nopeek') {
       // the dealer turns one card face up from the deck: the first flipper has to beat it (a wild counts as an Ace)
       const top = d.pop(), topSc = scoreAny(DRPEPPER.includes(top % 13) ? [12] : [top], []);
-      Object.assign(H, {stage: 'flip', up: Object.fromEntries(ps.map(i => [i, 0])), sc: {}, cat: {}, best: -1, top, topSc, bestSc: topSc, last: ps[0], msg: 'The dealer turns up a card: beat it. ' + S.seats[ps[0]] + ' flips first'});
+      Object.assign(H, {stage: 'flip', up: Object.fromEntries(ps.map(i => [i, 0])), open: Object.fromEntries(ps.map(i => [i, Array(7).fill(0)])), sc: {}, cat: {}, best: -1, top, topSc, bestSc: topSc, last: ps[0], msg: 'The dealer turns up a card: beat it. ' + S.seats[ps[0]] + ' flips first'});
     }
     if (S.game == 'draw' || S.game == 'nopeek') { // one ante each, then the first betting round starts left of the dealer
       ps.forEach(i => { post(i, S.ante); H.bet[i] = 0 }); H.turn = H.allin[ps[0]] ? nxt(ps[0]) : ps[0];
@@ -297,11 +297,15 @@ function createTable(saved, {now = Date.now, random = Math.random, shuffle = cry
     if (can.length < 2) return npNextFlipper(flipper);
     H.stage = 'bet'; H.turn = nxt(flipper); H.nact = (H.nact || 0) + 1;
   }
-  function flipAct(n) {
+  // which of a player's seven cards are face up (hands from before this was tracked: the first `up` cards)
+  function npOpen(i) { const H = S.hand; H.open = H.open || {}; return H.open[i] = H.open[i] || H.h[i].map((c, k) => k < H.up[i] ? 1 : 0) }
+  // flip the card the player tapped (idx), or the next face-down one (timeouts, bots)
+  function flipAct(n, idx) {
     const H = S.hand, i = S.seats.indexOf(n); if (H.stage != 'flip' || H.turn !== i) return 'Not your turn';
     if (H.up[i] >= 7) return;
-    H.up[i]++; H.nact = (H.nact || 0) + 1; H.last = i;
-    const sc = H.sc[i] = scoreAny(H.h[i].slice(0, H.up[i]), DRPEPPER); H.cat[i] = category(sc);
+    const open = npOpen(i), k = Number.isInteger(idx) && idx >= 0 && idx < 7 && !open[idx] ? idx : open.indexOf(0);
+    open[k] = 1; H.up[i]++; H.nact = (H.nact || 0) + 1; H.last = i;
+    const sc = H.sc[i] = scoreAny(H.h[i].filter((c, j) => open[j]), DRPEPPER); H.cat[i] = category(sc);
     if (sc > H.bestSc) { H.best = i; H.bestSc = sc; H.msg = n + ' beats the table with ' + H.cat[i]; return npBet(i) }
     H.msg = n + ' flips: ' + H.cat[i] + ', not enough yet';
     if (H.up[i] >= 7) {
@@ -554,9 +558,12 @@ function createTable(saved, {now = Date.now, random = Math.random, shuffle = cry
       if (syn()) { const e = synAct(n, m.a); if (e) return e }
       else if (bts()) { const e = btsAct(n, m.a, m.amt); if (e) return e }
       else if (np()) {
-        const H = S.hand; if (S.seats[H.turn] !== n) return 'Not your turn'; S.players[n].miss = 0;
-        if (H.stage == 'flip') { if (m.a == 'flip') { const e = flipAct(n); if (e) return e } else if (m.a == 'flipall') flipUntil(n); else return 'Flip a card first'; autoFold() }
-        else if (m.a == 'flip' || m.a == 'flipall') return 'Betting now'; else act(n, m.a, m.amt);
+        const H = S.hand;
+        // a second tap after taking the lead (betting has started): nothing to do, no error
+        if (H.stage != 'flip' && (m.a == 'flip' || m.a == 'flipall')) return;
+        if (S.seats[H.turn] !== n) return 'Not your turn'; S.players[n].miss = 0;
+        if (H.stage == 'flip') { if (m.a == 'flip') { const e = flipAct(n, m.idx); if (e) return e } else if (m.a == 'flipall') flipUntil(n); else return 'Flip a card first'; autoFold() }
+        else act(n, m.a, m.amt);
       }
       else if (draw()) {
         const H = S.hand; if (S.seats[H.turn] !== n) return 'Not your turn'; S.players[n].miss = 0;
@@ -690,7 +697,7 @@ function createTable(saved, {now = Date.now, random = Math.random, shuffle = cry
     }
     else if (H && H.g == 'nopeek') {
       // nobody sees a face-down card, not even its owner
-      const h = {}; for (const i of H.ps) h[i] = H.h[i].map((c, k) => k < H.up[i] ? c : null);
+      const h = {}; for (const i of H.ps) { const o = H.open && H.open[i]; h[i] = H.h[i].map((c, k) => (o ? o[k] : k < H.up[i]) ? c : null) }
       const {d, sc, ...rest} = H; hand = {...rest, h};
     }
     else if (H) {
