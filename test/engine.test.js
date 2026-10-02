@@ -839,9 +839,10 @@ test('7 Card No Peek: a flipper stops being able to flip once they have the lead
   assert.equal(H.stage, 'bet', 'a King beats the dealer\'s 3: flipping stops and betting starts');
   assert.equal(t.player(s.seats[a], {t: 'act', a: 'flip'}), undefined, 'an extra tap once ahead: no error flash');
   assert.equal(H.up[a], 1, '... and no more flips once ahead');
-  const first = H.turn; assert.equal(first, b);
-  assert.equal(t.player(s.seats[b], {t: 'act', a: 'raise', amt: 900}), undefined);
-  assert.equal(H.cur, 900, 'bet the whole stack: no cap'); assert.ok(H.allin[b]);
+  assert.equal(H.turn, a, 'whoever just took the lead decides first whether to bet');
+  assert.equal(t.player(s.seats[a], {t: 'act', a: 'raise', amt: 900}), undefined);
+  assert.equal(H.cur, 900, 'bet the whole stack: no cap'); assert.ok(H.allin[a]);
+  assert.equal(H.turn, b, 'then the others respond');
 });
 
 test('7 Card No Peek: tied hands split the pot', () => {

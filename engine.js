@@ -295,7 +295,8 @@ function createTable(saved, {now = Date.now, random = Math.random, shuffle = cry
     const H = S.hand, lv = npLive(), can = lv.filter(i => !H.allin[i]); H.bet = {}; H.ps.forEach(i => H.bet[i] = 0);
     H.cur = 0; H.acted = {}; H.minR = S.ante;
     if (can.length < 2) return npNextFlipper(flipper);
-    H.stage = 'bet'; H.turn = nxt(flipper); H.nact = (H.nact || 0) + 1;
+    // whoever just took the lead decides first: bet or check
+    H.stage = 'bet'; H.turn = H.allin[flipper] ? nxt(flipper) : flipper; H.nact = (H.nact || 0) + 1;
   }
   // which of a player's seven cards are face up (hands from before this was tracked: the first `up` cards)
   function npOpen(i) { const H = S.hand; H.open = H.open || {}; return H.open[i] = H.open[i] || H.h[i].map((c, k) => k < H.up[i] ? 1 : 0) }

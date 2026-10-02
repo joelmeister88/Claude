@@ -41,14 +41,17 @@ ok(await O.p.$('.cb.go') == null, 'only the flipper can tap cards');
   const mine = F.last().s.hand.h[F.last().s.seats.indexOf(first)];
   ok(mine[2] !== null && mine.filter(x => x !== null).length == 1, 'the card you tap is the one that flips');
 }
-ok((await P.p.textContent('.mid')).includes('Card to beat'), "the dealer's card is on the table");
-await F.p.click('.cb.go >> nth=0');
+ok((await P.p.textContent('.info')).includes('Card to beat') && await P.p.$('.mid .c:not(.b)'), "the dealer's card is on the table, labelled underneath");
+ok(await P.p.evaluate(() => { const a = document.querySelector('.mid').getBoundingClientRect(), b = document.querySelector('.info').getBoundingClientRect(); return a.bottom <= b.top + 1 }), "the card and the text under it don't overlap");
+if (await F.p.$('.cb.go')) await F.p.click('.cb.go >> nth=0'); // (unless that one tap already took the lead)
 await F.p.waitForFunction(() => document.querySelectorAll('.p .c.nk:not(.b)').length >= 1);
 ok((await O.p.$$eval('.rs', e => e.length)) >= 1, 'a flipped card is seen by everyone');
 for (let i = 0; i < 40 && !P.last().s.hand.done; i++) {
   for (const x of [H, P]) { const st = x.last().s.hand; const me = x == H ? 'Hana' : 'Pat';
     if (st.done || x.last().s.seats[st.turn] != me) continue;
-    const b = await x.p.$(st.stage == 'flip' ? '.cb.go' : '[data-a=call]'); if (b) await b.click() }
+    // look the button up at click time (the page may have redrawn since the last update)
+    const sel = st.stage == 'flip' ? '.cb.go' : '[data-a=call]';
+    if (await x.p.$(sel)) await x.p.locator(sel).first().click({timeout: 2000}).catch(() => {}) }
   await P.p.waitForTimeout(150);
 }
 ok(P.last().s.hand.done == 1, 'the hand finishes with a winner: ' + P.last().s.hand.msg);
