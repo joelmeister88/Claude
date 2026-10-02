@@ -10,6 +10,9 @@ const {createTable} = require('./engine');
 const PORT = +process.env.PORT || 3000;
 const DATA = process.env.DATA_FILE || path.join(__dirname, 'data', 'table.json');
 const PAGE = fs.readFileSync(path.join(__dirname, 'public', 'index.html'));
+// alert sounds: turn (ding), win (game over fanfare), yourdeal (your turn to deal)
+const SOUNDS = {};
+for (const n of ['turn', 'win', 'yourdeal']) { try { SOUNDS[n] = fs.readFileSync(path.join(__dirname, 'public', 'sounds', n + '.mp3')) } catch (e) { console.error('Missing sound', n) } }
 
 // ---------- persistence: table state + device tokens, written atomically a moment after each change ----------
 let saved = {};
@@ -44,6 +47,8 @@ const server = http.createServer((req, res) => {
       'content-security-policy': "default-src 'self'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self' ws: wss:"});
     return res.end(PAGE);
   }
+  const snd = req.method == 'GET' && url.match(/^\/sounds\/(\w+)\.mp3$/);
+  if (snd && SOUNDS[snd[1]]) { res.writeHead(200, {'content-type': 'audio/mpeg', 'cache-control': 'public, max-age=86400', 'content-length': SOUNDS[snd[1]].length}); return res.end(SOUNDS[snd[1]]) }
   if (url == '/healthz') return res.end('ok');
   res.writeHead(404); res.end('Not found');
 });

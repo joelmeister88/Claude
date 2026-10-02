@@ -1,6 +1,6 @@
 'use strict';
 const test = require('node:test'), assert = require('node:assert');
-const {createTable, s5, best, category} = require('../engine');
+const {createTable, s5, best, bestW, category} = require('../engine');
 
 // cards: rank index c%13 (0='2' .. 12='A'), suit c/13 (0..3)
 const card = (r, s) => '23456789TJQKA'.indexOf(r) + 13 * s;
@@ -265,7 +265,7 @@ test("dealer's choice: only the dealer changes the game, between hands, to a rea
   const c = clock(), t = createTable(null, {now: c});
   for (const n of ['A', 'B']) { t.player(n, {t: 'sit'}); t.host({op: 'seat', name: n}) }
   const v = t.view('');
-  assert.deepEqual(v.games.map(g => g.id), ['holdem', 'syn', 'bts'], "Hold'em is listed first");
+  assert.deepEqual(v.games.map(g => g.id), ['holdem', 'syn', 'bts', 'draw'], "Hold'em is listed first");
   assert.equal(v.gameName, "Texas Hold'em");
   assert.match(t.player('B', {t: 'game', game: 'holdem'}), /Only the dealer/);
   assert.match(t.player('A', {t: 'game', game: 'nope'}), /isn't available yet/);
@@ -709,4 +709,70 @@ test('dealing the same game again asks nobody; everyone answering starts it at o
   for (const x of t.view('').optin.who) t.player(x, {t: 'optin', in: true});
   assert.equal(s.hand.g, 'bts', 'everyone answered: no need to wait');
   assert.equal(s.hand.ps.length, 3);
+});
+
+test('5 Card Draw wild cards: best hand with the wild value', () => {
+  const h = s => s.split(' ').map(x => card(x[0], 'shdc'.indexOf(x[1])));
+  const W = card('7', 0) % 13, cat = (s, w = W) => category(bestW(h(s), w));
+  assert.equal(cat('7h Ks 9d 3c 2h'), 'Pair');                 // one wild makes a pair
+  assert.equal(cat('7h Ks Kd 3c 2h'), 'Trips');
+  assert.equal(cat('7h 7s Kd Kc 2h'), 'Quads');                // two wild + a pair
+  assert.equal(cat('7h 7s Kd Kc Kh'), 'Five of a kind');
+  assert.equal(cat('7h 7s 7d 7c Kh'), 'Five of a kind');
+  assert.equal(cat('7h 7s 7d 7c 7h'), 'Five of a kind');
+  assert.equal(cat('7h 2h 9h Jh Kh'.replace('7h', '7s')), 'Flush');   // wild completes a flush
+  assert.equal(cat('7s 4h 5h 6h 8h'), 'Straight flush');
+  assert.equal(cat('7s Ah 2d 3c 4h'), 'Straight');                    // wheel with a wild 5
+  assert.equal(cat('7s Kh Kd 3c 3h'), 'Full house');
+  assert.ok(bestW(h('7h Kh Kd Kc 2s'), W) > bestW(h('Kh Kd Kc 2s 3s'), W));
+  assert.equal(category(bestW(h('7h Ks 9d 3c 2h'), -1)), 'High card'); // no wild value: plain poker
+  assert.ok(s5(h('Ah As Ad Ac Ah')) > s5(h('Ts Js Qs Ks As')), 'five of a kind tops a straight flush');
+});
+
+test('5 Card Draw: bet, draw, bet again, showdown; the dealer picks the wild value', () => {
+  const c = clock(), deck = [...Array(52).keys()].reverse(); // deterministic
+  const t = createTable(null, {now: c, shuffle: () => [...deck]});
+  for (const n of ['A', 'B', 'C']) { t.player(n, {t: 'sit'}); t.host({op: 'seat', name: n}) }
+  const s = t.state();
+  const dealer = s.seats[s.dealer]; t.player(dealer, {t: 'game', game: 'draw'});
+  assert.equal(t.player(dealer, {t: 'deal', bb: 10, wild: 99}), 'Pick a wild card');
+  t.player(dealer, {t: 'deal', bb: 10, wild: 5});
+  for (const x of t.view('').optin ? t.view('').optin.who : []) t.player(x, {t: 'optin', in: true});
+  const H = s.hand; assert.equal(H.g, 'draw'); assert.equal(H.wild, 5);
+  assert.ok(H.ps.every(i => H.h[i].length == 5));
+  const v = t.view(s.seats[H.ps[0]]); assert.equal(v.hand.d, undefined); assert.equal(v.hand.disc, undefined);
+  assert.equal(t.view('').hand.h[H.ps[0]].every(x => x === null), true);
+  let guard = 0; while (H.stage == 0 && guard++ < 20) t.player(s.seats[H.turn], {t: 'act', a: 'call'});
+  assert.equal(H.stage, 1, 'betting done: draw phase');
+  assert.ok(t.player(s.seats[H.turn], {t: 'act', a: 'call'}), "can't bet while drawing");
+  const first = H.turn, old = [...H.h[first]];
+  assert.ok(t.player(s.seats[first], {t: 'act', a: 'draw', idx: [7]}), 'bad index rejected');
+  t.player(s.seats[first], {t: 'act', a: 'draw', idx: [0, 1]});
+  assert.equal(H.h[first].length, 5); assert.notEqual(H.h[first][0], old[0]); assert.equal(H.h[first][4], old[4]);
+  guard = 0; while (H.stage == 1 && guard++ < 5) t.player(s.seats[H.turn], {t: 'act', a: 'draw', idx: []});
+  assert.equal(H.stage, 2); guard = 0;
+  while (!H.done && guard++ < 20) t.player(s.seats[H.turn], {t: 'act', a: 'call'});
+  assert.ok(H.done && H.show, 'showdown'); assert.match(H.msg, /wins/);
+  assert.equal(Object.values(s.players).reduce((a, p) => a + p.chips, 0), 3000, 'chips conserved');
+});
+
+test('5 Card Draw: a draw that outruns the deck recycles the discards', () => {
+  const c = clock(), t = createTable(null, {now: c});
+  for (let i = 1; i <= 10; i++) { t.player('P' + i, {t: 'sit'}); t.host({op: 'seat', name: 'P' + i}) }
+  const s = t.state(), d = s.seats[s.dealer]; t.player(d, {t: 'game', game: 'draw'}); t.player(d, {t: 'deal', bb: 10, wild: -1});
+  for (const x of t.view('').optin ? t.view('').optin.who : []) t.player(x, {t: 'optin', in: true});
+  const H = s.hand; let g = 0; while (H.stage == 0 && g++ < 40) t.player(s.seats[H.turn], {t: 'act', a: 'call'});
+  g = 0; while (H.stage == 1 && g++ < 12) t.player(s.seats[H.turn], {t: 'act', a: 'draw', idx: [0, 1, 2, 3, 4]});
+  assert.equal(H.stage, 2); const all = Object.values(H.h).flat();
+  assert.ok(all.every(x => x >= 0 && x < 52), 'no missing cards'); 
+});
+
+test('Between the Sheets: the cards stay in the view after the pot is taken', () => {
+  const c = clock(), t = createTable(null, {now: c});
+  for (const n of ['A', 'B']) { t.player(n, {t: 'sit'}); t.host({op: 'seat', name: n}) }
+  const s = t.state(), d = s.seats[s.dealer]; t.player(d, {t: 'game', game: 'bts'}); t.player(d, {t: 'deal', ante: 100});
+  for (const x of t.view('').optin ? t.view('').optin.who : []) t.player(x, {t: 'optin', in: true});
+  const H = s.hand; let g = 0;
+  while (!H.done && g++ < 200) { if (H.stage == 'bet') t.player(s.seats[H.turn], {t: 'act', a: 'bet', amt: H.pot}); else { c.t += 11000; t.tick() } }
+  const v = t.view('A').hand; if (H.show) assert.ok(v.cards.lo != null && v.cards.hi != null, 'lo/hi still shown');
 });
