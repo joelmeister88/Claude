@@ -1,6 +1,6 @@
 'use strict';
 const test = require('node:test'), assert = require('node:assert');
-const {createTable, s5, best, bestW, category} = require('../engine');
+const {createTable, s5, best, bestW, scoreAny, category} = require('../engine');
 
 // cards: rank index c%13 (0='2' .. 12='A'), suit c/13 (0..3)
 const card = (r, s) => '23456789TJQKA'.indexOf(r) + 13 * s;
@@ -781,7 +781,6 @@ test('Between the Sheets: the cards stay in the view after the pot is taken', ()
 });
 
 test('7 Card No Peek Dr. Pepper: showing hands rank with 2s, 4s, 10s wild and missing cards', () => {
-  const {scoreAny} = require('../engine');
   const h = s => s.split(' ').map(x => card(x[0], 'shdc'.indexOf(x[1])));
   const W = [0, 2, 8], sc = s => scoreAny(h(s), W), cat = s => category(sc(s));
   assert.equal(cat('Ks'), 'High card');
@@ -800,7 +799,7 @@ test('7 Card No Peek Dr. Pepper: showing hands rank with 2s, 4s, 10s wild and mi
   assert.ok(sc('9s 9d') > sc('As Kd Qc'));
 });
 
-test('7 Card No Peek: cards stay hidden, flip until you beat the table, bet, last one in wins', () => {
+test('7 Card No Peek: cards stay hidden, beat the dealer card, bet with no cap, last one in wins', () => {
   const c = clock(), deck = [...Array(52).keys()].reverse();
   const t = createTable(null, {now: c, shuffle: () => [...deck]});
   for (const n of ['A', 'B', 'C']) { t.player(n, {t: 'sit'}); t.host({op: 'seat', name: n}) }
@@ -809,6 +808,8 @@ test('7 Card No Peek: cards stay hidden, flip until you beat the table, bet, las
   for (const x of t.view('').optin ? t.view('').optin.who : []) t.player(x, {t: 'optin', in: true});
   const H = s.hand; assert.equal(H.g, 'nopeek'); assert.ok(H.ps.every(i => H.h[i].length == 7));
   assert.equal(Object.values(H.tot).reduce((x, y) => x + y, 0), 300);
+  assert.equal(typeof H.top, 'number', "the dealer's card is turned up"); assert.equal(t.view('').hand.top, H.top);
+  assert.equal(H.top % 13, 8, 'this deck turns up a 10, which is wild'); assert.equal(H.bestSc, scoreAny([12], []), 'a wild upcard counts as an Ace');
   const mine = s.seats[H.ps[0]], v = t.view(mine).hand;
   assert.ok(v.h[H.ps[0]].every(x => x === null), 'not even your own cards are visible before you flip');
   assert.equal(v.d, undefined); assert.equal(v.sc, undefined);
@@ -816,17 +817,43 @@ test('7 Card No Peek: cards stay hidden, flip until you beat the table, bet, las
   assert.ok(t.player(s.seats[H.ps[1]], {t: 'act', a: 'flip'}), 'only the flipper may flip');
   assert.ok(t.player(mine, {t: 'act', a: 'call'}), "can't bet before flipping");
   t.player(mine, {t: 'act', a: 'flip'});
-  assert.equal(t.view(mine).hand.h[H.ps[0]].filter(x => x !== null).length, 1);
-  assert.equal(H.stage, 'bet', 'the first flip beats an empty table: betting starts');
-  assert.equal(s.seats[H.turn], s.seats[H.ps[1]], 'betting starts left of the flipper');
-  let g = 0; while (H.stage == 'bet' && g++ < 10) t.player(s.seats[H.turn], {t: 'act', a: 'call'});
-  assert.equal(H.stage, 'flip'); assert.equal(s.seats[H.turn], s.seats[H.ps[1]], 'next player flips');
-  g = 0; while (!H.done && g++ < 200) {
+  assert.equal(t.view(mine).hand.h[H.ps[0]].filter(x => x !== null).length, 1, 'one tap, one card');
+  let g = 0; while (!H.done && g++ < 300) {
     const n = s.seats[H.turn];
-    if (H.stage == 'flip') t.player(n, {t: 'act', a: 'flipall'}); else t.player(n, {t: 'act', a: g % 3 ? 'call' : 'fold'});
+    if (H.stage == 'flip') { const before = H.up[H.turn]; t.player(n, {t: 'act', a: 'flip'}); assert.equal(H.up[s.seats.indexOf(n)] >= before, true) }
+    else { assert.ok(H.cat[H.best] && H.stage == 'bet'); t.player(n, {t: 'act', a: g % 3 ? 'raise' : 'call', amt: 300}) }
   }
-  assert.ok(H.done, 'the hand ends'); assert.match(H.msg, /wins/);
+  assert.ok(H.done, 'the hand ends'); assert.match(H.msg, /wins|split/);
   assert.equal(Object.values(s.players).reduce((a, p) => a + p.chips, 0), 3000, 'chips conserved');
+});
+
+test('7 Card No Peek: a flipper stops being able to flip once they have the lead, and raises are not capped', () => {
+  const c = clock(), t = createTable(null, {now: c});
+  for (const n of ['A', 'B']) { t.player(n, {t: 'sit'}); t.host({op: 'seat', name: n}) }
+  const s = t.state(), d = s.seats[s.dealer]; t.player(d, {t: 'game', game: 'nopeek'}); t.player(d, {t: 'deal', ante: 100});
+  for (const x of t.view('').optin ? t.view('').optin.who : []) t.player(x, {t: 'optin', in: true});
+  const H = s.hand, h = x => x.split(' ').map(y => card(y[0], 'shdc'.indexOf(y[1])));
+  const [a, b] = H.ps; H.top = card('3', 2); H.topSc = H.bestSc = scoreAny([H.top], []);
+  H.h[a] = h('Ks 3d 5c 6h 7d 8s 9c'); H.h[b] = h('Ah 3c 5d 6s 7h 8c 9d'); H.turn = a; H.stage = 'flip';
+  t.player(s.seats[a], {t: 'act', a: 'flip'});
+  assert.equal(H.stage, 'bet', 'a King beats the dealer\'s 3: flipping stops and betting starts');
+  assert.ok(t.player(s.seats[a], {t: 'act', a: 'flip'}), 'no more flips once ahead');
+  const first = H.turn; assert.equal(first, b);
+  assert.equal(t.player(s.seats[b], {t: 'act', a: 'raise', amt: 900}), undefined);
+  assert.equal(H.cur, 900, 'bet the whole stack: no cap'); assert.ok(H.allin[b]);
+});
+
+test('7 Card No Peek: tied hands split the pot', () => {
+  const c = clock(), t = createTable(null, {now: c});
+  for (const n of ['A', 'B']) { t.player(n, {t: 'sit'}); t.host({op: 'seat', name: n}) }
+  const s = t.state(), d = s.seats[s.dealer]; t.player(d, {t: 'game', game: 'nopeek'}); t.player(d, {t: 'deal', ante: 100});
+  for (const x of t.view('').optin ? t.view('').optin.who : []) t.player(x, {t: 'optin', in: true});
+  const H = s.hand, h = x => x.split(' ').map(y => card(y[0], 'shdc'.indexOf(y[1])));
+  const [a, b] = H.ps; H.top = card('3', 2); H.topSc = H.bestSc = scoreAny([H.top], []);
+  H.h[a] = h('Ks Kd 3c 5h 7d 8s 9c'); H.h[b] = h('Kh Kc 3d 5s 7h 8c 9d'); H.turn = a; H.stage = 'flip';
+  let g = 0; while (!H.done && g++ < 100) { const n = s.seats[H.turn]; if (H.stage == 'flip') t.player(n, {t: 'act', a: 'flip'}); else t.player(n, {t: 'act', a: 'call'}) }
+  assert.ok(H.done); assert.match(H.msg, /tie and split/);
+  assert.equal(s.players.A.chips, 1000); assert.equal(s.players.B.chips, 1000);
 });
 
 test('7 Card No Peek: capped at 7 players', () => {

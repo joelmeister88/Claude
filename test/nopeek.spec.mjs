@@ -33,15 +33,16 @@ await P.p.waitForSelector('text=Cards flipped', {timeout: 25000});
 let s = P.last().s;
 ok(s.hand.g == 'nopeek' && s.hand.h[s.seats.indexOf('Pat')].every(c => c === null), 'seven face-down cards, none visible');
 const first = s.seats[s.hand.turn], F = first == 'Hana' ? H : P, O = first == 'Hana' ? P : H;
-await F.p.waitForSelector('[data-a=flip]');
-ok(await O.p.$('[data-a=flip]') == null, 'only the flipper sees Flip');
-await F.p.click('[data-a=flip]');
-await O.p.waitForSelector('[data-a=call]');
-ok(P.last().s.hand.stage == 'bet' && (await O.p.$$eval('.rs', e => e.length)) >= 1, 'first flip is seen by everyone, betting starts');
+await F.p.waitForSelector('.cb.go');
+ok(await O.p.$('.cb.go') == null, 'only the flipper can tap cards');
+ok((await P.p.textContent('.mid')).includes('Card to beat'), "the dealer's card is on the table");
+await F.p.click('.cb.go >> nth=0');
+await F.p.waitForFunction(() => document.querySelectorAll('.p .c.nk:not(.b)').length >= 1);
+ok((await O.p.$$eval('.rs', e => e.length)) >= 1, 'a flipped card is seen by everyone');
 for (let i = 0; i < 40 && !P.last().s.hand.done; i++) {
   for (const x of [H, P]) { const st = x.last().s.hand; const me = x == H ? 'Hana' : 'Pat';
     if (st.done || x.last().s.seats[st.turn] != me) continue;
-    const b = await x.p.$(st.stage == 'flip' ? '[data-a=flipall]' : '[data-a=call]'); if (b) await b.click() }
+    const b = await x.p.$(st.stage == 'flip' ? '.cb.go' : '[data-a=call]'); if (b) await b.click() }
   await P.p.waitForTimeout(150);
 }
 ok(P.last().s.hand.done == 1, 'the hand finishes with a winner: ' + P.last().s.hand.msg);

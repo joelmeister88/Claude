@@ -202,7 +202,11 @@ function createTable(saved, {now = Date.now, random = Math.random, shuffle = cry
     const h = {}, bet = {}, tot = {}; ps.forEach(i => { h[i] = Array.from({length: g.hole}, () => d.pop()); bet[i] = 0; tot[i] = 0 });
     const H = S.hand = {g: S.game == 'draw' ? 'draw' : S.game == 'nopeek' ? 'nopeek' : 'holdem', ps, btn: nb, d, board: [], h, bet, tot, fold: {}, allin: {}, acted: {}, stage: 0, cur: S.game == 'draw' || S.game == 'nopeek' ? 0 : S.bb, minR: S.game == 'draw' || S.game == 'nopeek' ? S.ante : S.bb, turn: -1, done: 0, show: 0, msg: 'New hand'};
     if (S.game == 'draw') Object.assign(H, {disc: [], drew: {}, wild: S.wild ?? -1});
-    if (S.game == 'nopeek') Object.assign(H, {stage: 'flip', up: Object.fromEntries(ps.map(i => [i, 0])), sc: {}, cat: {}, best: -1, bestSc: -1, last: ps[0], cap: null, msg: 'Nobody looks! ' + S.seats[ps[0]] + ' flips first'});
+    if (S.game == 'nopeek') {
+      // the dealer turns one card face up from the deck: the first flipper has to beat it (a wild counts as an Ace)
+      const top = d.pop(), topSc = scoreAny(DRPEPPER.includes(top % 13) ? [12] : [top], []);
+      Object.assign(H, {stage: 'flip', up: Object.fromEntries(ps.map(i => [i, 0])), sc: {}, cat: {}, best: -1, top, topSc, bestSc: topSc, last: ps[0], msg: 'The dealer turns up a card: beat it. ' + S.seats[ps[0]] + ' flips first'});
+    }
     if (S.game == 'draw' || S.game == 'nopeek') { // one ante each, then the first betting round starts left of the dealer
       ps.forEach(i => { post(i, S.ante); H.bet[i] = 0 }); H.turn = H.allin[ps[0]] ? nxt(ps[0]) : ps[0];
       if (H.turn < 0) adv(); autoFold(); return;
@@ -222,14 +226,16 @@ function createTable(saved, {now = Date.now, random = Math.random, shuffle = cry
   }
   function finish(lv) { const H = S.hand, n = S.seats[lv[0]], pot = Object.values(H.tot).reduce((a, b) => a + b, 0); S.players[n].chips += pot; H.msg = n + ' wins ' + pot; endHand() }
   function showdown(lv) {
-    const H = S.hand, sc = {}; lv.forEach(i => sc[i] = H.g == 'draw' ? bestW(H.h[i], H.wild) : best(H.h[i].concat(H.board)));
-    const levels = [...new Set(lv.map(i => H.tot[i]))].sort((a, b) => a - b), win = {}; let pv = 0;
+    const H = S.hand, sc = {}; lv.forEach(i => sc[i] = H.g == 'draw' ? bestW(H.h[i], H.wild) : H.g == 'nopeek' ? H.sc[i] : best(H.h[i].concat(H.board)));
+    const levels = [...new Set(lv.map(i => H.tot[i]).concat(Math.max(...H.ps.map(i => H.tot[i]))))].sort((a, b) => a - b), win = {}; let pv = 0;
     levels.forEach(L => {
       let pot = 0; H.ps.forEach(i => pot += Math.min(H.tot[i], L) - Math.min(H.tot[i], pv)); pv = L;
-      const el = lv.filter(i => H.tot[i] >= L), mx = Math.max(...el.map(i => sc[i])), w = el.filter(i => sc[i] == mx), sh = Math.floor(pot / w.length);
+      const el0 = lv.filter(i => H.tot[i] >= L), el = el0.length ? el0 : lv, mx = Math.max(...el.map(i => sc[i])), w = el.filter(i => sc[i] == mx), sh = Math.floor(pot / w.length);
       w.forEach((i, k) => { const n = S.seats[i], g = sh + (k ? 0 : pot - sh * w.length); S.players[n].chips += g; win[n] = (win[n] || 0) + g });
     });
-    H.msg = Object.keys(win).map(n => n + ' wins ' + win[n] + ' (' + category(sc[S.seats.indexOf(n)]) + ')').join(', ');
+    const wn = Object.keys(win);
+    H.msg = H.g == 'nopeek' && wn.length > 1 ? wn.join(' and ') + ' tie and split the pot: ' + wn.map(n => win[n]).join(' + ') + ' (' + category(sc[S.seats.indexOf(wn[0])]) + ')'
+      : wn.map(n => n + ' wins ' + win[n] + ' (' + category(sc[S.seats.indexOf(n)]) + ')').join(', ');
     H.show = 1; endHand();
   }
   // 5 Card Draw: bet (stage 0), everyone draws in turn (stage 1), bet again (stage 2), showdown
@@ -261,28 +267,34 @@ function createTable(saved, {now = Date.now, random = Math.random, shuffle = cry
     drawNext(); autoFold();
   }
   // 7 Card No Peek: nobody looks. Left of the dealer, each player flips cards one at a time until their showing
-  // hand beats the best one showing (a tie doesn't count); then everyone still in bets. Flip all seven without
-  // beating it and you're out. Last player in takes the pot. Bets are capped at the shortest stack, so no side pots.
+  // hand beats the best one showing (the first flipper must beat the dealer's face-up card; a tie doesn't beat it);
+  // then everyone still in bets. Flip all seven without beating it and you're out, unless you tie it: ties split.
   const npLive = () => S.hand.ps.filter(i => !S.hand.fold[i]);
   function npLeader() {
-    const H = S.hand, lv = npLive(); let b = lv[0], bs = -1;
-    for (const i of lv) if (i in H.sc && (H.sc[i] > bs || (H.sc[i] == bs && i === H.best))) { b = i; bs = H.sc[i] }
-    H.best = bs < 0 ? -1 : b; H.bestSc = bs;
+    const H = S.hand, lv = npLive().filter(i => i in H.sc), mx = Math.max(H.topSc, ...lv.map(i => H.sc[i]));
+    const top = lv.filter(i => H.sc[i] == mx);
+    H.bestSc = mx; H.best = mx > H.topSc ? (top.includes(H.best) ? H.best : top[0]) : -1;
   }
+  const npWho = () => { const H = S.hand; return H.best >= 0 ? S.seats[H.best] + "'s " + H.cat[H.best] : "the dealer's card" };
   function npNextFlipper(from) {
     const H = S.hand;
     for (;;) {
       const lv = npLive(); if (lv.length == 1) return finish(lv);
-      const L = H.ps.length, o = H.ps.indexOf(from); let c = -1;
-      for (let k = 1; k <= L; k++) { const j = H.ps[(o + k) % L]; if (!H.fold[j]) { c = j; break } }
-      if (H.up[c] >= 7) { H.fold[c] = 1; H.msg = S.seats[c] + ' is out: all seven cards showing and no better hand'; from = c; npLeader(); continue }
-      H.turn = c; H.stage = 'flip'; H.nact = (H.nact || 0) + 1; H.msg = S.seats[c] + ' to flip' + (H.best >= 0 ? ': beat ' + S.seats[H.best] + "'s " + H.cat[H.best] : ''); return;
+      const L = H.ps.length, o = H.ps.indexOf(from); let c = -1, out = -1;
+      for (let k = 1; k <= L && c < 0 && out < 0; k++) {
+        const j = H.ps[(o + k) % L]; if (H.fold[j]) continue;
+        if (H.up[j] < 7) c = j;
+        else if (H.sc[j] < H.bestSc) out = j; // all seven showing and still behind: out. (Tied with the best: stays in, can't flip more.)
+      }
+      if (out >= 0) { H.fold[out] = 1; H.msg = S.seats[out] + ' is out: all seven cards showing and no better hand'; from = out; npLeader(); continue }
+      if (c < 0) { H.msg = ''; return showdown(lv) } // everyone left is tied with all seven showing: split the pot
+      H.turn = c; H.stage = 'flip'; H.nact = (H.nact || 0) + 1; H.msg = S.seats[c] + ' to flip: beat ' + npWho(); return;
     }
   }
   function npBet(flipper) {
     const H = S.hand, lv = npLive(), can = lv.filter(i => !H.allin[i]); H.bet = {}; H.ps.forEach(i => H.bet[i] = 0);
-    H.cur = 0; H.acted = {}; H.minR = S.ante; H.cap = Math.min(...lv.map(i => S.players[S.seats[i]].chips));
-    if (H.cap <= 0 || can.length < 2) return npNextFlipper(flipper);
+    H.cur = 0; H.acted = {}; H.minR = S.ante;
+    if (can.length < 2) return npNextFlipper(flipper);
     H.stage = 'bet'; H.turn = nxt(flipper); H.nact = (H.nact || 0) + 1;
   }
   function flipAct(n) {
@@ -292,7 +304,11 @@ function createTable(saved, {now = Date.now, random = Math.random, shuffle = cry
     const sc = H.sc[i] = scoreAny(H.h[i].slice(0, H.up[i]), DRPEPPER); H.cat[i] = category(sc);
     if (sc > H.bestSc) { H.best = i; H.bestSc = sc; H.msg = n + ' beats the table with ' + H.cat[i]; return npBet(i) }
     H.msg = n + ' flips: ' + H.cat[i] + ', not enough yet';
-    if (H.up[i] >= 7) { H.fold[i] = 1; H.msg = n + ' is out: all seven cards and no better hand'; npLeader(); npNextFlipper(i) }
+    if (H.up[i] >= 7) {
+      if (sc < H.bestSc) { H.fold[i] = 1; H.msg = n + ' is out: all seven cards and no better hand'; npLeader() }
+      else H.msg = n + ' ties with all seven cards showing';
+      npNextFlipper(i);
+    }
   }
   function flipUntil(n) {
     const i = S.seats.indexOf(n);
@@ -324,7 +340,7 @@ function createTable(saved, {now = Date.now, random = Math.random, shuffle = cry
     const p = S.players[n], b = H.bet[t], need = H.cur - b;
     if (a == 'fold') { H.fold[t] = 1; if (H.disc) H.disc.push(...H.h[t]); H.msg = n + ' folds' }
     else {
-      let to = a == 'raise' ? int(amt) || 0 : 0; const mx = Math.min(b + p.chips, H.cap ?? Infinity); to = Math.min(to, mx);
+      let to = a == 'raise' ? int(amt) || 0 : 0; const mx = b + p.chips; to = Math.min(to, mx);
       if (a != 'raise' || to <= H.cur) { post(t, need); H.msg = n + (need > 0 ? ' calls ' + Math.min(need, b + p.chips) : ' checks') }
       else {
         // bets go up in steps of the big blind (a raise of at least one big blind); all-in can be any amount

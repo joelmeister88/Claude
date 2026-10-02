@@ -18,7 +18,7 @@ button{cursor:pointer;font-weight:600;min-height:44px}input{width:90px;font-size
 .c b{font-weight:800;letter-spacing:-.04em}.c span{font-size:1.05em;margin-top:.04em}
 .c.red{color:#c0262d}.c.b{background:repeating-linear-gradient(45deg,#1e4f9c,#1e4f9c 4px,#2b66c4 4px,#2b66c4 8px);border:2px solid #fff}
 .c{position:relative}.c.w::after{content:'★';position:absolute;top:0;right:2px;font-size:.5em;color:#e0a000}
-.c.xs{--w:11px;margin:0}.c.nk{--w:40px}.c.md{--w:56px}.c.rs{--w:28px}.c.sel{outline:3px solid #e0574b;transform:translateY(-8px)}
+.c.xs{--w:11px;margin:0}.c.nk{--w:40px}.cb.go .c{animation:pl 1.2s ease-in-out infinite}@keyframes pl{50%{transform:translateY(-4px);box-shadow:0 0 0 3px #ffd54a}}.c.md{--w:56px}.c.rs{--w:28px}.c.sel{outline:3px solid #e0574b;transform:translateY(-8px)}
 .cb{padding:0;border:0;background:none;min-height:0;display:inline-block}select{font:inherit;font-size:16px;min-height:44px;border-radius:10px;border:1px solid var(--bd);padding:8px;background:var(--pn);color:var(--fg)}
 .c.e{background:#0003;box-shadow:none;border:1px dashed #fff6}
 .c.bd{--w:var(--cw)}.c.lg{--w:64px}.c.sm{--w:19px;margin:0}
@@ -123,7 +123,7 @@ function render(){const m=$('#main');
   const cards=!ih||isBts?'':isSyn?(i in H.cards?'<br>'+ch(i==my&&!H.shown[i]&&H.stage!='reveal'?null:H.cards[i],'sm'):'')+`<div class="lv">${coins(H.lives[i])}</div>`:!fo&&!isNP?'<br>'+H.h[i].map(c=>ch(H.show?c:null,isDraw?'xs':'sm')).join(''):'';
   seats+=`<div class="st ${H&&!H.done&&H.turn==i?'t':''} ${fo||so?'f':''} ${lo?'lo':''} ${i==my?'me':''}" style="left:${x}%;top:${y}%"><b>${(H&&!H.done?H.btn:S.dealer)==i?'<span class="d">D</span>':''}${n===S.hostName?'<span title="Host">👑</span>':''}${esc(n)}</b>${S.players[n].chips}${cards}${so?'<div class="bet" style="color:#ddd">sitting out</div>':''}${ih&&!isSyn&&!isBts&&H.bet[i]?`<div class="bet"><i class="ch"></i>${H.bet[i]}</div>`:''}</div>`}
  const res=isBts&&H.res,ring=res=='win'?'box-shadow:0 0 0 3px #2ecc71':res=='post'?'box-shadow:0 0 0 3px #e0574b':'';
- const board=isBts?(H.done&&!H.show?'':`${H.done?'':`<span class="deck"><i class="c b bd"></i><b>${H.deckN}</b></span> &nbsp;`}${ch(H.cards.lo,'bd')}${H.cards.mid!=null?ch(H.cards.mid,'bd').replace('<i ',`<i style="${ring}" `):'<i class="c e bd"></i>'}${ch(H.cards.hi,'bd')}`):isSyn?(H.done?'':`<span class="deck"><i class="c b bd"></i><b>${H.deckN}</b></span>`):isNP?`<div style="font-size:14px;line-height:1.5">Wild: <b>2s 4s 10s</b> ★<br>${H.stage=='flip'?'Flipping':'Betting'}</div>`:isDraw?`<div style="font-size:14px;line-height:1.5">${H.wild>=0?'Wild: <b>'+WN(H.wild)+'s</b> ★':'No wild cards'}<br>${H.stage==0?'Betting':H.stage==1?'Drawing':'Final betting'}</div>`:H?[0,1,2,3,4].map(k=>H.board[k]!=null?ch(H.board[k],'bd'):'<i class="c e bd"></i>').join(''):'';
+ const board=isBts?(H.done&&!H.show?'':`${H.done?'':`<span class="deck"><i class="c b bd"></i><b>${H.deckN}</b></span> &nbsp;`}${ch(H.cards.lo,'bd')}${H.cards.mid!=null?ch(H.cards.mid,'bd').replace('<i ',`<i style="${ring}" `):'<i class="c e bd"></i>'}${ch(H.cards.hi,'bd')}`):isSyn?(H.done?'':`<span class="deck"><i class="c b bd"></i><b>${H.deckN}</b></span>`):isNP?`<div style="font-size:13px;line-height:1.4;text-align:center">${ch(H.top,'bd')}<br>Card to beat${[0,2,8].includes(H.top%13)?' (wild = Ace)':''}<br>Wild: <b>2s 4s 10s</b> ★</div>`:isDraw?`<div style="font-size:14px;line-height:1.5">${H.wild>=0?'Wild: <b>'+WN(H.wild)+'s</b> ★':'No wild cards'}<br>${H.stage==0?'Betting':H.stage==1?'Drawing':'Final betting'}</div>`:H?[0,1,2,3,4].map(k=>H.board[k]!=null?ch(H.board[k],'bd'):'<i class="c e bd"></i>').join(''):'';
  const qi=(S.queue||[]).indexOf(me),full=S.seats.filter(n=>!n).length-Object.keys(S.pend).length<=0;
  const live=H&&!H.done,myDeal=!live&&my>=0&&S.dealer==my&&S.dealDl>0,dealer=S.seats[S.dealer];
  const A=S.again,ans=A&&(A.yes[me]?'in':A.no[me]?'out':''),askMe=!!A&&A.who.includes(me)&&!ans;
@@ -154,12 +154,13 @@ function render(){const m=$('#main');
    else if(!H.done&&H.turn==my&&H.stage=='skip')me_+=`<div class="note-ok">No bet: ${esc(H.why)}. Next player in <span data-cd="${H.nextAt||0}"></span></div>`;
    else if(!H.done&&H.stage=='bet')me_+=`<div class="m">Waiting for ${esc(S.seats[H.turn])}… <span data-cd="${H.dl||0}"></span></div>`}
   else if(inH){const pk=Date.now()<peekT,dr=isDraw&&!H.done&&H.stage==1&&H.turn==my,cs=isDraw?'md':'lg',dk=H.id+':'+(H.nact||0);if(dselKey!==dk){dselKey=dk;dsel=[]}
-   me_+=`<div class="row">${isNP?H.h[my].map(c=>ch(c,'nk')).join(''):dr?H.h[my].map((c,k)=>`<button class="cb" data-a="dtog" data-v="${k}" aria-label="Card ${k+1}">${ch(c,cs+(dsel.includes(k)?' sel':''))}</button>`).join(''):H.h[my].map(c=>ch(pk?c:null,cs)).join('')+(pk?'<button data-a="hide">🙈 Hide now</button>':'<button data-a="peek">👁 Peek 3s</button>')}</div>`;
+   const nf=isNP&&!H.done&&H.turn==my&&H.stage=='flip';
+   me_+=`<div class="row">${isNP?H.h[my].map((c,k)=>nf&&c==null?`<button class="cb go" data-a="flip" aria-label="Flip card ${k+1}">${ch(null,'nk')}</button>`:ch(c,'nk')).join(''):dr?H.h[my].map((c,k)=>`<button class="cb" data-a="dtog" data-v="${k}" aria-label="Card ${k+1}">${ch(c,cs+(dsel.includes(k)?' sel':''))}</button>`).join(''):H.h[my].map(c=>ch(pk?c:null,cs)).join('')+(pk?'<button data-a="hide">🙈 Hide now</button>':'<button data-a="peek">👁 Peek 3s</button>')}</div>`;
    if(dr)me_+=`<div class="row"><b>Your turn: swap cards</b> <span class="clock" data-cd="${H.dl||0}"></span></div><small>Tap the cards you want to swap${H.wild>=0?` (★ = wild ${WN(H.wild)}s)`:''}. Swap none to stand pat.</small><div class="row act"><button class="g" data-a="drawgo">${dsel.length?'Swap '+dsel.length+(dsel.length>1?' cards':' card'):'Stand pat'}</button></div>`;
-   else if(isNP&&!H.done&&H.turn==my&&H.stage=='flip'){const lb=H.best>=0?`Beat ${esc(S.seats[H.best])}'s ${esc(H.cat[H.best])}`:'You flip first';
-    me_+=`<div class="row"><b>Your turn to flip</b> <span class="clock" data-cd="${H.dl||0}"></span></div><div class="note-ok">${lb}. No peeking: you don't see a card until you flip it.</div><div class="row act"><button class="g" data-a="flip">Flip a card</button><button data-a="flipall">Flip until I beat it</button></div>`}
+   else if(isNP&&!H.done&&H.turn==my&&H.stage=='flip'){const lb=H.best>=0?`${esc(S.seats[H.best])}'s ${esc(H.cat[H.best])}`:`the dealer's ${cn(H.top)}${[0,2,8].includes(H.top%13)?' (wild: counts as an Ace)':''}`;
+    me_+=`<div class="row"><b>Your turn: tap a card to flip it</b> <span class="clock" data-cd="${H.dl||0}"></span></div><div class="note-ok">Beat ${lb}. You stop as soon as you do. A tie doesn't beat it.</div>`}
    else if(!H.done&&H.turn==my){const need=H.cur-H.bet[my];rtStep=isDraw||isNP?S.ante:S.bb;rtMax=Math.min(H.bet[my]+pl.chips,H.cap==null?1e12:H.cap);rtMin=Math.min(Math.ceil((H.cur+rtStep)/rtStep)*rtStep,rtMax);const mn=rtMin;if(!rt||rt<mn||rt>rtMax)rt=mn;else rt=rtSnap(rt);
-    me_+=`<div class="row"><b>Your turn</b> <span class="clock" data-cd="${H.dl||0}"></span></div><div class="row act"><button class="r" data-a="fold">Fold</button><button class="g" data-a="call">${need>0?'Call '+Math.min(need,pl.chips):'Check'}</button><button data-a="allin">${isNP?'Max':'All-in'}</button></div>`;
+    me_+=`<div class="row"><b>Your turn</b> <span class="clock" data-cd="${H.dl||0}"></span></div><div class="row act"><button class="r" data-a="fold">Fold</button><button class="g" data-a="call">${need>0?'Call '+Math.min(need,pl.chips):'Check'}</button><button data-a="allin">All-in</button></div>`;
     if(pl.chips>need)me_+=`<div class="row act"><button data-a="rtdn" aria-label="Less">−</button><input id="rt" type="number" inputmode="numeric" min="${mn}" max="${rtMax}" step="${rtStep}" value="${rt}"><button data-a="rtup" aria-label="More">+</button><button class="g" data-a="raise">${H.cur?'Raise to':'Bet'}</button></div><div class="row act"><button data-a="q" data-v="${mn}">Min</button><button data-a="q" data-v="${rtSnap(H.cur+pot/2)}">½ Pot</button><button data-a="q" data-v="${rtSnap(H.cur+pot)}">Pot</button></div><small>Bets go up in steps of ${rtStep}. You can bet up to ${rtMax}${H.bet[my]?` (${pl.chips} more)`:''}.</small>`}
    else if(!H.done)me_+=`<div class="m">${isNP&&H.stage=='flip'?'Waiting for '+esc(S.seats[H.turn])+' to flip…':isDraw&&H.stage==1?'Waiting for '+esc(S.seats[H.turn])+' to draw…':'Waiting for '+esc(S.seats[H.turn])+'…'} <span data-cd="${H.dl||0}"></span></div>`}
   else if(H&&!H.done)me_+=`<div class="m">${isSyn||isBts?"A game is in progress. You'll be dealt in when the next one starts.":"You're sitting out this hand. You'll be dealt in next hand."}</div>`;
@@ -288,20 +289,20 @@ const RULES={
   'Read the board: if four hearts are showing, anyone holding one heart has a flush.',
   'Don\'t chase. Calling big bets hoping for one card usually costs more than it wins.']},
  nopeek:{name:'7 Card No Peek Dr. Pepper',how:[
-  'Everyone pays the <b>ante</b>, then gets <b>seven cards face down</b>. <b>Nobody looks at their cards</b>, not even you: you only see a card once you flip it.',
+  'Everyone pays the <b>ante</b>, then gets <b>seven cards face down</b>. <b>Nobody looks at their cards</b>, not even you: you only see a card once you flip it by tapping it.',
   '<b>2s, 4s and 10s are wild</b> (Dr. Pepper): they stand for any card you like.',
-  'Left of the dealer goes first and flips one card at a time. Everyone else flips cards one at a time until the cards they have showing make a <b>better poker hand than the best one showing</b> (a tie doesn\'t count).',
-  'A player who takes the lead starts a <b>betting round</b> for everyone still in (fold, check, call or raise). Then the next player to the left starts flipping, trying to beat the new leader.',
-  'Flip all seven cards and still can\'t beat the leader? You\'re <b>out</b>, with no betting round. The last player in takes the pot.',
+  'The dealer turns <b>one card face up from the deck</b>. The player to the dealer\'s left taps cards one at a time until their showing cards <b>beat it</b>. (If the dealer\'s card is wild, it counts as an Ace.)',
+  'The moment you take the lead, flipping stops and everyone still in <b>bets</b> (fold, check, call or raise). Then the next player to the left flips, trying to beat the new leader.',
+  'A tie doesn\'t beat the leader. Flip all seven cards and still can\'t beat the leader? You\'re <b>out</b>, with no betting round. The last player in takes the pot.',
+  'If you tie the best hand with all seven cards showing, you stay in, and if everyone left is tied, they <b>split the pot</b>.',
   'Hands are ranked on the cards showing. Any kicker beats a missing card (7-3 beats a lone 7). Straights and flushes need all five cards showing.'],
  table:[
-  'The dealer picks the ante (100 or more, in steps of 100). Bets and raises go up in steps of the ante.',
+  'The dealer picks the ante (100 or more, in steps of 100). Bets and raises go up in steps of the ante. There is no bet cap: you can bet everything.',
   'Up to 7 players. If more are seated, this game can\'t be chosen.',
-  'Bets are capped at the smallest stack of anyone still in, so there are no side pots.',
   'You have 30 seconds to flip or bet; if time runs out, your cards flip until you beat the leader (or you\'re out), and a bet is checked or folded.'],
  ranks:'Five of a kind › Straight flush › Four of a kind › Full house › Flush › Straight › Three of a kind › Two pair › Pair › High card',
  tips:[
-  'It\'s all luck of the flip, so the skill is the betting: bet when you take the lead early with a strong hand.',
+  'The flips are luck, so the skill is the betting: bet when you take the lead early with a strong hand.',
   'A player who has flipped many cards without a big hand is likely close to being out.',
   'Wilds are everywhere (12 of 52 cards), so pairs are common and weak: trips and better win.']},
  draw:{name:'5 Card Draw',how:[
