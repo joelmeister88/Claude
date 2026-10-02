@@ -85,6 +85,7 @@ ok((await P.p.$$('#main .c.lg.b')).length == 2, 'Hide now hides them right away'
 let turnChecked = false;
 async function checkTurn() {
   ok(await P.p.$eval('#main .p', e => e.classList.contains('turn')), 'panel turns red on your turn');
+  ok((await P.p.textContent('.st.me .tn')).includes('YOUR TURN') && await P.p.$eval('.st.me', e => e.classList.contains('t')), 'your seat glows with a YOUR TURN tag');
   ok(/^(2\d|30)s$/.test(await P.p.textContent('.clock')), 'turn clock shows ~30s');
   ok(await P.p.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'no sideways scrolling');
   if (await P.p.$('#rt')) ok(await P.p.getAttribute('#rt', 'step') == String(P.last().s.bb), 'raise box steps by the big blind');
