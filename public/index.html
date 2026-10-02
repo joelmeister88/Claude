@@ -159,7 +159,7 @@ function render(){const m=$('#main');
    if(dr)me_+=`<div class="row"><b>Your turn: swap cards</b> <span class="clock" data-cd="${H.dl||0}"></span></div><small>Tap the cards you want to swap${H.wild>=0?` (★ = wild ${WN(H.wild)}s)`:''}. Swap none to stand pat.</small><div class="row act"><button class="g" data-a="drawgo">${dsel.length?'Swap '+dsel.length+(dsel.length>1?' cards':' card'):'Stand pat'}</button></div>`;
    else if(isNP&&!H.done&&H.turn==my&&H.stage=='flip'){const lb=H.best>=0?`${esc(S.seats[H.best])}'s ${esc(H.cat[H.best])}`:`the dealer's ${cn(H.top)}${[0,2,8].includes(H.top%13)?' (wild: counts as an Ace)':''}`;
     me_+=`<div class="row"><b>Your turn: tap a card to flip it</b> <span class="clock" data-cd="${H.dl||0}"></span></div><div class="note-ok">Beat ${lb}. You stop as soon as you do. A tie doesn't beat it.</div>`}
-   else if(!H.done&&H.turn==my){const need=H.cur-H.bet[my];rtStep=isDraw||isNP?S.ante:S.bb;rtMax=Math.min(H.bet[my]+pl.chips,H.cap==null?1e12:H.cap);rtMin=Math.min(Math.ceil((H.cur+rtStep)/rtStep)*rtStep,rtMax);const mn=rtMin;if(!rt||rt<mn||rt>rtMax)rt=mn;else rt=rtSnap(rt);
+   else if(!H.done&&H.turn==my){const need=H.cur-H.bet[my];rtStep=isDraw?100:isNP?S.ante:S.bb;rtMax=Math.min(H.bet[my]+pl.chips,H.cap==null?1e12:H.cap);rtMin=Math.min(Math.ceil((H.cur+rtStep)/rtStep)*rtStep,rtMax);const mn=rtMin;if(!rt||rt<mn||rt>rtMax)rt=mn;else rt=rtSnap(rt);
     me_+=`<div class="row"><b>Your turn</b> <span class="clock" data-cd="${H.dl||0}"></span></div><div class="row act"><button class="r" data-a="fold">Fold</button><button class="g" data-a="call">${need>0?'Call '+Math.min(need,pl.chips):'Check'}</button><button data-a="allin">All-in</button></div>`;
     if(pl.chips>need)me_+=`<div class="row act"><button data-a="rtdn" aria-label="Less">−</button><input id="rt" type="number" inputmode="numeric" min="${mn}" max="${rtMax}" step="${rtStep}" value="${rt}"><button data-a="rtup" aria-label="More">+</button><button class="g" data-a="raise">${H.cur?'Raise to':'Bet'}</button></div><div class="row act"><button data-a="q" data-v="${mn}">Min</button><button data-a="q" data-v="${rtSnap(H.cur+pot/2)}">½ Pot</button><button data-a="q" data-v="${rtSnap(H.cur+pot)}">Pot</button></div><small>Bets go up in steps of ${rtStep}. You can bet up to ${rtMax}${H.bet[my]?` (${pl.chips} more)`:''}.</small>`}
    else if(!H.done)me_+=`<div class="m">${isNP&&H.stage=='flip'?'Waiting for '+esc(S.seats[H.turn])+' to flip…':isDraw&&H.stage==1?'Waiting for '+esc(S.seats[H.turn])+' to draw…':'Waiting for '+esc(S.seats[H.turn])+'…'} <span data-cd="${H.dl||0}"></span></div>`}
@@ -312,7 +312,7 @@ const RULES={
   'Second betting round, then everyone left shows their five cards. Best hand wins the pot.',
   '<b>Wild cards:</b> the dealer picks a value (or none). Every card of that value (marked ★) can stand for any card you like, so <b>Five of a kind</b> is possible and beats everything.'],
  table:[
-  'The dealer picks the ante (100 or more, in steps of 100) and the wild card each time they deal. Bets and raises go up in steps of the ante.',
+  'The dealer picks the ante (100 or more, in steps of 100) and the wild card each time they deal. Bets and raises are 100 or more, in steps of 100.',
   'Up to 10 players (five cards each). If the deck runs low, the discards are shuffled back in.',
   'You have 30 seconds to bet or to choose your cards; if time runs out you check/fold, or keep your cards.',
   'Your cards stay face down until it\'s your turn to draw: tap <b>Peek</b> to look for 3 seconds.'],
