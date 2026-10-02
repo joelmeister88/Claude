@@ -29,6 +29,8 @@ npm start
 
 - **5 Card Draw**: the dealer picks the ante (100 or more, in steps of 100) and, if they like, a **wild card value** (every card of that value, marked ★, stands for any card; Five of a kind is the top hand). Five private cards each, a betting round, then everyone in turn swaps up to five cards (tap the cards, then **Swap**, or **Stand pat**), a second betting round, and a showdown. Up to 10 players. 30 seconds to bet or choose cards; running out of time checks/folds or keeps your cards.
 
+- **7 Card No Peek Dr. Pepper**: the dealer picks the ante (100 or more, in steps of 100). Seven face-down cards each that nobody looks at, even the owner. 2s, 4s and 10s are wild. Left of the dealer, each player flips cards one at a time until their showing cards beat the best hand showing (a tie doesn't count; any kicker beats a missing card; straights and flushes need five showing). Taking the lead starts a betting round; flip all seven without beating the leader and you're out with no betting. Last one in takes the pot. Up to 7 players: the game can't be chosen with more seated. Bets are capped at the shortest stack, so there are no side pots.
+
 When the dealer switches to a different game, everyone else gets 20 seconds to tap **I'm in** or **Sit this one out** (no answer means in). Sitting out keeps your seat and skips the ante/blinds for as long as that game keeps being dealt; **Deal me in** rejoins from the next one.
 
 Tap **📖** at the top for the full rules and tips for each game.

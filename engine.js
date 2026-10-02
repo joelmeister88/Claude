@@ -9,7 +9,8 @@ const GAMES = {
   holdem: {name: "Texas Hold'em", hole: 2, ready: true, blurb: 'Two hole cards, five on the board. Best five-card hand wins.'},
   syn: {name: 'Screw Your Neighbor', ready: true, blurb: 'One card each: keep it or swap left. Lowest card loses a life; last one standing takes the pot.'},
   bts: {name: 'Between the Sheets', ready: true, blurb: 'Two cards face up: bet the next one lands between them. Hit the post and pay double.'},
-  draw: {name: '5 Card Draw', hole: 5, ready: true, wild: true, blurb: 'Five cards each, bet, swap up to five, bet again. The dealer can pick a wild card value.'},
+  nopeek: {name: '7 Card No Peek Dr. Pepper', hole: 7, ready: true, max: 7, blurb: 'Seven face-down cards you never look at. Flip until you beat the best hand showing. 2s, 4s and 10s are wild. Up to 7 players.'},
+  draw: {name: '5 Card Draw', hole: 5, ready: true, wild: true, max: 10, blurb: 'Five cards each, bet, swap up to five, bet again. The dealer can pick a wild card value.'},
 };
 const HN = ['High card', 'Pair', 'Two pair', 'Trips', 'Straight', 'Flush', 'Full house', 'Quads', 'Straight flush', 'Five of a kind'];
 const OPTIN = 20000, LIVES = 4, REVEAL = 5000, SKIP = 10000, RESULT = 4000, PASSED = 2000, AGAIN = 30000, WAIT = 10000, BUST = 30000, TURN = 30000, ACE_TURN = 5000, DEAL = 120000, MISSES = 3, BOT_DELAY = 5000, SEATS = 12;
@@ -32,11 +33,11 @@ function best(c) {
   (function f(s, a) { if (a.length == 5) { m = Math.max(m, s5(a)); return } for (let i = s; i < n; i++) f(i + 1, [...a, c[i]]) })(0, []);
   return m;
 }
-// 5 Card Draw with a wild value: every card of rank `w` (0='2'..12='A', -1 = none) can stand for any card.
+// 5 Card Draw with a wild value: every card of rank `w` (a rank, or a list of ranks; 0='2'..12='A', -1 = none) can stand for any card.
 // Tries every rank for the wild cards and keeps the best hand. Five of a kind is the top hand.
 function bestW(c, w) {
-  const nat = c.filter(x => x % 13 != w), k = c.length - nat.length;
-  if (w < 0 || !k) return best(c);
+  const ws = [].concat(w), nat = c.filter(x => !ws.includes(x % 13)), k = c.length - nat.length;
+  if (!k) return best(c);
   if (!nat.length) return s5([12, 12, 12, 12, 12]);
   if (k >= 4) return s5([nat[0], nat[0], nat[0], nat[0], nat[0]]);
   const same = nat.every(x => (x / 13 | 0) == (nat[0] / 13 | 0)); let m = 0;
@@ -44,6 +45,25 @@ function bestW(c, w) {
     if (i == k) { m = Math.max(m, s5(nat.concat(a))); return }
     for (let r = 0; r < 13; r++) f(i + 1, [...a, r + 13 * (same ? nat[0] / 13 | 0 : i % 4)]);
   })(0, []);
+  return m;
+}
+// 7 Card No Peek Dr. Pepper: wilds are 2s, 4s and 10s
+const DRPEPPER = [0, 2, 8];
+// a hand of fewer than five cards: only pairs, trips, quads and so on count (no straights or flushes)
+function partial(r) {
+  const m = {}; r.forEach(x => m[x] = (m[x] || 0) + 1);
+  const g = Object.keys(m).map(Number).sort((a, b) => m[b] - m[a] || b - a), k = g.map(x => m[x]).join('');
+  const cat = k[0] == '4' ? 7 : k[0] == '3' ? (k[1] == '2' ? 6 : 3) : k[0] == '2' ? (k[1] == '2' ? 2 : 1) : 0, t = g.slice();
+  while (t.length < 5) t.push(0);
+  return t.reduce((a, x) => a * 15 + x, cat);
+}
+// the best hand showing from 1 to 7 cards, wilds included. A missing card is worth less than any kicker.
+function scoreAny(c, w) {
+  const ws = [].concat(w), n = c.length;
+  if (n == 5) return bestW(c, ws);
+  if (n > 5) { let m = 0; (function f(s, a) { if (a.length == 5) { m = Math.max(m, bestW(a, ws)); return } for (let i = s; i < n; i++) f(i + 1, [...a, c[i]]) })(0, []); return m }
+  const nat = c.filter(x => !ws.includes(x % 13)), k = n - nat.length; let m = 0;
+  (function f(i, a) { if (i == k) { m = Math.max(m, partial(nat.map(x => 2 + x % 13).concat(a))); return } for (let r = 0; r < 13; r++) f(i + 1, [...a, 2 + r]) })(0, []);
   return m;
 }
 const category = score => HN[Math.floor(score / 15 ** 5)];
@@ -95,6 +115,8 @@ function createTable(saved, {now = Date.now, random = Math.random, shuffle = cry
   const bts = () => S.hand && S.hand.g == 'bts';
   const holdem = () => S.hand && !syn() && !bts(); // any betting-round game (Hold'em or Draw)
   const draw = () => S.hand && S.hand.g == 'draw';
+  const np = () => S.hand && S.hand.g == 'nopeek';
+  const anteGame = g => g == 'syn' || g == 'bts' || g == 'draw' || g == 'nopeek';
   const inLiveHand = n => {
     const i = S.seats.indexOf(n), H = S.hand; if (!live() || i < 0) return false;
     return syn() ? H.lives[i] > 0 : bts() ? H.ps.includes(i) && !H.out[i] : H.ps.includes(i) && !H.fold[i];
@@ -173,14 +195,15 @@ function createTable(saved, {now = Date.now, random = Math.random, shuffle = cry
     // remember everyone's chips, so the host can cancel this game and give them back
     const snap = takeSnap();
     if (S.game == 'syn' || S.game == 'bts') { const e = S.game == 'syn' ? startSyn(nb) : startBts(nb); if (!e) { S.snap = snap; S.lastGame = S.game } return e }
-    const ps = []; for (let k = 1; k <= SEATS; k++) { const i = (nb + k) % SEATS, n = S.seats[i]; if (n && S.players[n].chips >= (S.game == 'draw' ? S.ante : 1) && !S.sitout[n]) ps.push(i) }
-    if (ps.length < 2) return S.game == 'draw' ? 'Need at least 2 seated players who can cover the ante of ' + S.ante : 'Need at least 2 seated players with chips';
-    if (S.game == 'draw' && ps.length > 10) return '5 Card Draw is for up to 10 players (5 cards each)';
+    const ps = []; for (let k = 1; k <= SEATS; k++) { const i = (nb + k) % SEATS, n = S.seats[i]; if (n && S.players[n].chips >= (S.game == 'draw' || S.game == 'nopeek' ? S.ante : 1) && !S.sitout[n]) ps.push(i) }
+    if (ps.length < 2) return S.game == 'draw' || S.game == 'nopeek' ? 'Need at least 2 seated players who can cover the ante of ' + S.ante : 'Need at least 2 seated players with chips';
+    if (g.max && ps.length > g.max) return g.name + ' is for up to ' + g.max + ' players';
     S.btn = S.dealer = nb; S.dealDl = 0; S.snap = snap; S.lastGame = S.game; const d = shuffle();
     const h = {}, bet = {}, tot = {}; ps.forEach(i => { h[i] = Array.from({length: g.hole}, () => d.pop()); bet[i] = 0; tot[i] = 0 });
-    const H = S.hand = {g: S.game == 'draw' ? 'draw' : 'holdem', ps, btn: nb, d, board: [], h, bet, tot, fold: {}, allin: {}, acted: {}, stage: 0, cur: S.game == 'draw' ? 0 : S.bb, minR: S.game == 'draw' ? S.ante : S.bb, turn: -1, done: 0, show: 0, msg: 'New hand'};
+    const H = S.hand = {g: S.game == 'draw' ? 'draw' : S.game == 'nopeek' ? 'nopeek' : 'holdem', ps, btn: nb, d, board: [], h, bet, tot, fold: {}, allin: {}, acted: {}, stage: 0, cur: S.game == 'draw' || S.game == 'nopeek' ? 0 : S.bb, minR: S.game == 'draw' || S.game == 'nopeek' ? S.ante : S.bb, turn: -1, done: 0, show: 0, msg: 'New hand'};
     if (S.game == 'draw') Object.assign(H, {disc: [], drew: {}, wild: S.wild ?? -1});
-    if (S.game == 'draw') { // one ante each, then the first betting round starts left of the dealer
+    if (S.game == 'nopeek') Object.assign(H, {stage: 'flip', up: Object.fromEntries(ps.map(i => [i, 0])), sc: {}, cat: {}, best: -1, bestSc: -1, last: ps[0], cap: null, msg: 'Nobody looks! ' + S.seats[ps[0]] + ' flips first'});
+    if (S.game == 'draw' || S.game == 'nopeek') { // one ante each, then the first betting round starts left of the dealer
       ps.forEach(i => { post(i, S.ante); H.bet[i] = 0 }); H.turn = H.allin[ps[0]] ? nxt(ps[0]) : ps[0];
       if (H.turn < 0) adv(); autoFold(); return;
     }
@@ -237,7 +260,54 @@ function createTable(saved, {now = Date.now, random = Math.random, shuffle = cry
     H.drew[i] = out.length; H.msg = n + (out.length ? ' draws ' + out.length : ' stands pat'); H.nact = (H.nact || 0) + 1;
     drawNext(); autoFold();
   }
+  // 7 Card No Peek: nobody looks. Left of the dealer, each player flips cards one at a time until their showing
+  // hand beats the best one showing (a tie doesn't count); then everyone still in bets. Flip all seven without
+  // beating it and you're out. Last player in takes the pot. Bets are capped at the shortest stack, so no side pots.
+  const npLive = () => S.hand.ps.filter(i => !S.hand.fold[i]);
+  function npLeader() {
+    const H = S.hand, lv = npLive(); let b = lv[0], bs = -1;
+    for (const i of lv) if (i in H.sc && (H.sc[i] > bs || (H.sc[i] == bs && i === H.best))) { b = i; bs = H.sc[i] }
+    H.best = bs < 0 ? -1 : b; H.bestSc = bs;
+  }
+  function npNextFlipper(from) {
+    const H = S.hand;
+    for (;;) {
+      const lv = npLive(); if (lv.length == 1) return finish(lv);
+      const L = H.ps.length, o = H.ps.indexOf(from); let c = -1;
+      for (let k = 1; k <= L; k++) { const j = H.ps[(o + k) % L]; if (!H.fold[j]) { c = j; break } }
+      if (H.up[c] >= 7) { H.fold[c] = 1; H.msg = S.seats[c] + ' is out: all seven cards showing and no better hand'; from = c; npLeader(); continue }
+      H.turn = c; H.stage = 'flip'; H.nact = (H.nact || 0) + 1; H.msg = S.seats[c] + ' to flip' + (H.best >= 0 ? ': beat ' + S.seats[H.best] + "'s " + H.cat[H.best] : ''); return;
+    }
+  }
+  function npBet(flipper) {
+    const H = S.hand, lv = npLive(), can = lv.filter(i => !H.allin[i]); H.bet = {}; H.ps.forEach(i => H.bet[i] = 0);
+    H.cur = 0; H.acted = {}; H.minR = S.ante; H.cap = Math.min(...lv.map(i => S.players[S.seats[i]].chips));
+    if (H.cap <= 0 || can.length < 2) return npNextFlipper(flipper);
+    H.stage = 'bet'; H.turn = nxt(flipper); H.nact = (H.nact || 0) + 1;
+  }
+  function flipAct(n) {
+    const H = S.hand, i = S.seats.indexOf(n); if (H.stage != 'flip' || H.turn !== i) return 'Not your turn';
+    if (H.up[i] >= 7) return;
+    H.up[i]++; H.nact = (H.nact || 0) + 1; H.last = i;
+    const sc = H.sc[i] = scoreAny(H.h[i].slice(0, H.up[i]), DRPEPPER); H.cat[i] = category(sc);
+    if (sc > H.bestSc) { H.best = i; H.bestSc = sc; H.msg = n + ' beats the table with ' + H.cat[i]; return npBet(i) }
+    H.msg = n + ' flips: ' + H.cat[i] + ', not enough yet';
+    if (H.up[i] >= 7) { H.fold[i] = 1; H.msg = n + ' is out: all seven cards and no better hand'; npLeader(); npNextFlipper(i) }
+  }
+  function flipUntil(n) {
+    const i = S.seats.indexOf(n);
+    for (let g = 0; g < 8 && live() && S.hand.stage == 'flip' && S.hand.turn === i; g++) if (flipAct(n)) break;
+  }
+  function advNP() {
+    const H = S.hand, lv = npLive(); if (lv.length == 1) return finish(lv);
+    npLeader();
+    if (H.stage == 'flip') return npNextFlipper(H.turn);
+    const can = lv.filter(i => !H.allin[i]);
+    if (!can.every(i => H.acted[i] && H.bet[i] == H.cur)) { H.turn = nxt(H.turn); return }
+    npNextFlipper(H.last);
+  }
   function adv() {
+    if (S.hand.g == 'nopeek') return advNP();
     if (S.hand.g == 'draw') return advDraw();
     const H = S.hand, lv = H.ps.filter(i => !H.fold[i]); if (lv.length == 1) return finish(lv);
     const can = lv.filter(i => !H.allin[i]);
@@ -254,11 +324,11 @@ function createTable(saved, {now = Date.now, random = Math.random, shuffle = cry
     const p = S.players[n], b = H.bet[t], need = H.cur - b;
     if (a == 'fold') { H.fold[t] = 1; if (H.disc) H.disc.push(...H.h[t]); H.msg = n + ' folds' }
     else {
-      let to = a == 'raise' ? int(amt) || 0 : 0; const mx = b + p.chips; to = Math.min(to, mx);
+      let to = a == 'raise' ? int(amt) || 0 : 0; const mx = Math.min(b + p.chips, H.cap ?? Infinity); to = Math.min(to, mx);
       if (a != 'raise' || to <= H.cur) { post(t, need); H.msg = n + (need > 0 ? ' calls ' + Math.min(need, b + p.chips) : ' checks') }
       else {
         // bets go up in steps of the big blind (a raise of at least one big blind); all-in can be any amount
-        const step = draw() ? S.ante : S.bb, least = Math.ceil((H.cur + step) / step) * step;
+        const step = draw() || np() ? S.ante : S.bb, least = Math.ceil((H.cur + step) / step) * step;
         if (to < mx) to = Math.min(Math.max(least, Math.floor(to / step) * step), mx);
         H.cur = to; H.acted = {}; post(t, to - b); H.msg = n + (H.allin[t] ? ' is all-in ' : ' raises to ') + to;
       }
@@ -441,7 +511,7 @@ function createTable(saved, {now = Date.now, random = Math.random, shuffle = cry
       if (S.seats[S.dealer] !== n) return "You're not the dealer";
       const keep = [S.sb, S.bb, S.ante, S.wild];
       if (S.game == 'draw' && m.wild != null) { const w = int(m.wild); if (!(w >= -1 && w <= 12)) return 'Pick a wild card'; S.wild = w }
-      if (S.game == 'syn' || S.game == 'bts' || S.game == 'draw') { const an = m.ante == null ? S.ante : int(m.ante), e0 = anteError(an); if (e0) { S.wild = keep[3]; return e0 } S.ante = an }
+      if (anteGame(S.game)) { const an = m.ante == null ? S.ante : int(m.ante), e0 = anteError(an); if (e0) { S.wild = keep[3]; return e0 } S.ante = an }
       else { const bb = m.bb == null ? S.bb : int(m.bb), e0 = blindError(bb); if (e0) return e0; S.sb = bb / 2; S.bb = bb }
       // a different game from last time: everyone else gets 20 seconds to say if they're in
       if (S.lastGame && S.game != S.lastGame) {
@@ -460,12 +530,18 @@ function createTable(saved, {now = Date.now, random = Math.random, shuffle = cry
       if (S.seats[S.dealer] !== n || live()) return "Only the dealer can change the game, between hands";
       if (S.optin) return 'Players are choosing whether they are in';
       const g = GAMES[m.game]; if (!g || !g.ready) return "That game isn't available yet";
+      if (g.max && S.seats.filter((n, i) => eligible(i)).length > g.max) return g.name + ' is for up to ' + g.max + ' players, and more are seated';
       S.game = m.game;
     }
     else if (m.t == 'act') {
       if (!live()) return 'Not your turn';
       if (syn()) { const e = synAct(n, m.a); if (e) return e }
       else if (bts()) { const e = btsAct(n, m.a, m.amt); if (e) return e }
+      else if (np()) {
+        const H = S.hand; if (S.seats[H.turn] !== n) return 'Not your turn'; S.players[n].miss = 0;
+        if (H.stage == 'flip') { if (m.a == 'flip') { const e = flipAct(n); if (e) return e } else if (m.a == 'flipall') flipUntil(n); else return 'Flip a card first'; autoFold() }
+        else if (m.a == 'flip' || m.a == 'flipall') return 'Betting now'; else act(n, m.a, m.amt);
+      }
       else if (draw()) {
         const H = S.hand; if (S.seats[H.turn] !== n) return 'Not your turn'; S.players[n].miss = 0;
         if (H.stage == 1) { if (m.a != 'draw') return 'Choose your cards to swap first'; const e = drawAct(n, m.idx); if (e) return e } else if (m.a == 'draw') return 'Betting now'; else act(n, m.a, m.amt);
@@ -522,6 +598,7 @@ function createTable(saved, {now = Date.now, random = Math.random, shuffle = cry
         btsAct(S.seats[H.turn], gap >= 6 ? 'bet' : 'pass', bet); ch = 1;
       }
     }
+    else if (botAt && t >= botAt && live() && np() && H.stage == 'flip') { flipUntil(S.seats[H.turn]); ch = 1 }
     else if (botAt && t >= botAt && live() && draw() && H.stage == 1) { drawAct(S.seats[H.turn], [0, 1, 2, 3, 4].filter(() => random() < .4)); ch = 1 }
     else if (botAt && t >= botAt && live() && holdem()) {
       const n = S.seats[H.turn], p = S.players[n], need = H.cur - H.bet[H.turn];
@@ -551,6 +628,7 @@ function createTable(saved, {now = Date.now, random = Math.random, shuffle = cry
     else if (live() && bts() && S.hand.stage == 'bet' && S.hand.dl && t >= S.hand.dl) {
       const H = S.hand, n = S.seats[H.turn]; btsAct(n, 'pass'); H.msg = n + ' passes (out of time)'; ch = 1;
     }
+    else if (live() && np() && S.hand.stage == 'flip' && S.hand.dl && t >= S.hand.dl) { flipUntil(S.seats[S.hand.turn]); ch = 1 }
     else if (live() && draw() && S.hand.stage == 1 && S.hand.dl && t >= S.hand.dl) {
       const H = S.hand, n = S.seats[H.turn], p = S.players[n]; p.miss = (p.miss || 0) + 1; const out = p.miss >= MISSES;
       drawAct(n, []); if (out) standOrLeave(n); if (live()) H.msg = n + ' stands pat (out of time)'; ch = 1;
@@ -594,6 +672,11 @@ function createTable(saved, {now = Date.now, random = Math.random, shuffle = cry
       const al = H.done ? [] : alive(), k = al.indexOf(H.turn);
       const {d, notes, ...rest} = H; hand = {...rest, cards, notes: (notes || {})[my] || [], deckN: d.length, nb: k < 0 ? -1 : k < al.length - 1 ? al[k + 1] : -1};
     }
+    else if (H && H.g == 'nopeek') {
+      // nobody sees a face-down card, not even its owner
+      const h = {}; for (const i of H.ps) h[i] = H.h[i].map((c, k) => k < H.up[i] ? c : null);
+      const {d, sc, ...rest} = H; hand = {...rest, h};
+    }
     else if (H) {
       const my = name ? S.seats.indexOf(name) : -1, h = {};
       for (const i of H.ps) h[i] = i === my || (H.show && !H.fold[i]) ? H.h[i] : H.h[i].map(() => null);
@@ -602,11 +685,11 @@ function createTable(saved, {now = Date.now, random = Math.random, shuffle = cry
     const players = {}; for (const n in S.players) players[n] = {chips: S.players[n].chips, bot: !!S.players[n].bot};
     return {players, seats: S.seats, pend: S.pend, leave: S.leave, bust: S.bust, buy: S.buy, wait: S.wait, hand,
       btn: S.btn, dealer: S.dealer, dealDl: S.dealDl, sb: S.sb, bb: S.bb, ante: S.ante, game: S.game, wild: S.wild ?? -1, gameName: GAMES[S.game].name,
-      games: Object.entries(GAMES).map(([id, g]) => ({id, name: g.name, blurb: g.blurb, ready: !!g.ready})), n: S.n,
+      games: Object.entries(GAMES).map(([id, g]) => ({id, name: g.name, blurb: g.blurb, ready: !!g.ready, max: g.max || 0})), seatedN: S.seats.filter((n, i) => eligible(i)).length, n: S.n,
       queue: S.queue, paused: S.frozenAt || 0, carry: S.carry || 0, again: S.again, optin: S.optin, sitout: S.sitout, hold: holdReason(),
       canUndo: !!S.snap, known: Object.keys(S.known).sort((a, b) => S.known[b] - S.known[a])};
   }
   return {state: () => S, view, player, host, tick, remember, forget, reset, release};
 }
 
-module.exports = {createTable, best, bestW, s5, category, WAIT, BUST, TURN, SEATS};
+module.exports = {createTable, best, bestW, scoreAny, s5, category, WAIT, BUST, TURN, SEATS};

@@ -265,7 +265,7 @@ test("dealer's choice: only the dealer changes the game, between hands, to a rea
   const c = clock(), t = createTable(null, {now: c});
   for (const n of ['A', 'B']) { t.player(n, {t: 'sit'}); t.host({op: 'seat', name: n}) }
   const v = t.view('');
-  assert.deepEqual(v.games.map(g => g.id), ['holdem', 'syn', 'bts', 'draw'], "Hold'em is listed first");
+  assert.deepEqual(v.games.map(g => g.id), ['holdem', 'syn', 'bts', 'nopeek', 'draw'], "Hold'em is listed first");
   assert.equal(v.gameName, "Texas Hold'em");
   assert.match(t.player('B', {t: 'game', game: 'holdem'}), /Only the dealer/);
   assert.match(t.player('A', {t: 'game', game: 'nope'}), /isn't available yet/);
@@ -778,4 +778,64 @@ test('Between the Sheets: the cards stay in the view after the pot is taken', ()
   const H = s.hand; let g = 0;
   while (!H.done && g++ < 200) { if (H.stage == 'bet') t.player(s.seats[H.turn], {t: 'act', a: 'bet', amt: H.pot}); else { c.t += 11000; t.tick() } }
   const v = t.view('A').hand; if (H.show) assert.ok(v.cards.lo != null && v.cards.hi != null, 'lo/hi still shown');
+});
+
+test('7 Card No Peek Dr. Pepper: showing hands rank with 2s, 4s, 10s wild and missing cards', () => {
+  const {scoreAny} = require('../engine');
+  const h = s => s.split(' ').map(x => card(x[0], 'shdc'.indexOf(x[1])));
+  const W = [0, 2, 8], sc = s => scoreAny(h(s), W), cat = s => category(sc(s));
+  assert.equal(cat('Ks'), 'High card');
+  assert.ok(sc('Ks 3d') > sc('Ks'), 'any kicker beats a missing card');
+  assert.ok(sc('As') > sc('Ks'));
+  assert.equal(cat('2s'), 'High card'); assert.ok(sc('2s') >= sc('As'), 'a lone wild is at least an Ace');
+  assert.equal(cat('2s 9d'), 'Pair');                       // wild pairs the 9
+  assert.equal(cat('9s 9d'), 'Pair');
+  assert.equal(cat('4s Td 9c'), 'Trips');
+  assert.equal(cat('9s 9d 4c Th'), 'Quads');
+  assert.equal(cat('9s 4d 5c 6h'), 'Pair', 'four cards: no straights');
+  assert.equal(cat('9s 4d 5c 6h 7d'), 'Straight');            // wild is the 8
+  assert.equal(cat('9s Ks 5s 2s 7s'), 'Flush');
+  assert.equal(cat('9s 9d 9c 4s 4h'), 'Five of a kind');
+  assert.equal(cat('9s 9d Kc Ks 4h 3d 5c'), 'Full house');
+  assert.ok(sc('9s 9d') > sc('As Kd Qc'));
+});
+
+test('7 Card No Peek: cards stay hidden, flip until you beat the table, bet, last one in wins', () => {
+  const c = clock(), deck = [...Array(52).keys()].reverse();
+  const t = createTable(null, {now: c, shuffle: () => [...deck]});
+  for (const n of ['A', 'B', 'C']) { t.player(n, {t: 'sit'}); t.host({op: 'seat', name: n}) }
+  const s = t.state(), dealer = s.seats[s.dealer]; t.player(dealer, {t: 'game', game: 'nopeek'});
+  assert.equal(t.player(dealer, {t: 'deal', ante: 100}), undefined);
+  for (const x of t.view('').optin ? t.view('').optin.who : []) t.player(x, {t: 'optin', in: true});
+  const H = s.hand; assert.equal(H.g, 'nopeek'); assert.ok(H.ps.every(i => H.h[i].length == 7));
+  assert.equal(Object.values(H.tot).reduce((x, y) => x + y, 0), 300);
+  const mine = s.seats[H.ps[0]], v = t.view(mine).hand;
+  assert.ok(v.h[H.ps[0]].every(x => x === null), 'not even your own cards are visible before you flip');
+  assert.equal(v.d, undefined); assert.equal(v.sc, undefined);
+  assert.equal(s.seats[H.turn], mine, 'left of the dealer flips first');
+  assert.ok(t.player(s.seats[H.ps[1]], {t: 'act', a: 'flip'}), 'only the flipper may flip');
+  assert.ok(t.player(mine, {t: 'act', a: 'call'}), "can't bet before flipping");
+  t.player(mine, {t: 'act', a: 'flip'});
+  assert.equal(t.view(mine).hand.h[H.ps[0]].filter(x => x !== null).length, 1);
+  assert.equal(H.stage, 'bet', 'the first flip beats an empty table: betting starts');
+  assert.equal(s.seats[H.turn], s.seats[H.ps[1]], 'betting starts left of the flipper');
+  let g = 0; while (H.stage == 'bet' && g++ < 10) t.player(s.seats[H.turn], {t: 'act', a: 'call'});
+  assert.equal(H.stage, 'flip'); assert.equal(s.seats[H.turn], s.seats[H.ps[1]], 'next player flips');
+  g = 0; while (!H.done && g++ < 200) {
+    const n = s.seats[H.turn];
+    if (H.stage == 'flip') t.player(n, {t: 'act', a: 'flipall'}); else t.player(n, {t: 'act', a: g % 3 ? 'call' : 'fold'});
+  }
+  assert.ok(H.done, 'the hand ends'); assert.match(H.msg, /wins/);
+  assert.equal(Object.values(s.players).reduce((a, p) => a + p.chips, 0), 3000, 'chips conserved');
+});
+
+test('7 Card No Peek: capped at 7 players', () => {
+  const t = createTable(null, {now: clock()});
+  for (let i = 1; i <= 8; i++) { t.player('P' + i, {t: 'sit'}); t.host({op: 'seat', name: 'P' + i}) }
+  const s = t.state(), d = s.seats[s.dealer];
+  assert.equal(t.view('').seatedN, 8);
+  assert.match(t.player(d, {t: 'game', game: 'nopeek'}), /up to 7 players/);
+  assert.equal(t.view('').games.find(x => x.id == 'nopeek').max, 7);
+  t.player('P8', {t: 'stand'});
+  assert.equal(t.player(d, {t: 'game', game: 'nopeek'}), undefined);
 });
