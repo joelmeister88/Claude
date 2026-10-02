@@ -11,7 +11,7 @@ const GAMES = {
   bts: {name: 'Between the Sheets', ready: true, blurb: 'Two cards face up: bet the next one lands between them. Hit the post and pay double.'},
 };
 const HN = ['High card', 'Pair', 'Two pair', 'Trips', 'Straight', 'Flush', 'Full house', 'Quads', 'Straight flush'];
-const LIVES = 4, REVEAL = 5000, SKIP = 10000, RESULT = 4000, PASSED = 2000, AGAIN = 30000, WAIT = 10000, BUST = 30000, TURN = 30000, ACE_TURN = 5000, DEAL = 120000, MISSES = 3, BOT_DELAY = 5000, SEATS = 12;
+const OPTIN = 20000, LIVES = 4, REVEAL = 5000, SKIP = 10000, RESULT = 4000, PASSED = 2000, AGAIN = 30000, WAIT = 10000, BUST = 30000, TURN = 30000, ACE_TURN = 5000, DEAL = 120000, MISSES = 3, BOT_DELAY = 5000, SEATS = 12;
 
 // ---------- hand evaluation (cards are 0..51: rank c%13, 0='2'..12='A'; suit c/13) ----------
 function s5(c) {
@@ -42,7 +42,7 @@ function cryptoShuffle() {
 // our regulars, offered on the name screen from the start (deleting one in the admin panel sticks)
 const DEFAULT_NAMES = ['Joel', 'Jesi', 'Paul', 'Kate', 'Branson', 'Shane', 'Darrin', 'Jennifer', 'Mitchell', 'Shay', 'Sam', 'Kelli', 'Jason'];
 const fresh = () => ({players: {}, seats: Array(SEATS).fill(''), pend: {}, queue: [], leave: {}, bust: {}, buy: {}, wait: 0,
-  hand: null, btn: -1, dealer: -1, dealDl: 0, sb: 5, bb: 10, ante: 100, game: 'holdem', n: 0, last: -1, known: {}, forgot: {}});
+  hand: null, btn: -1, dealer: -1, dealDl: 0, sb: 5, bb: 10, ante: 100, game: 'holdem', n: 0, last: -1, known: {}, forgot: {}, sitout: {}});
 const int = v => { const x = Math.floor(+v); return Number.isFinite(x) ? x : NaN };
 // the dealer picks the big blind: at least 10, in steps of 10; the small blind is always half
 const blindError = bb => bb >= 10 && bb % 10 == 0 ? '' : 'Blind must be 10 or more, in steps of 10';
@@ -58,7 +58,8 @@ function createTable(saved, {now = Date.now, random = Math.random, shuffle = cry
   const S = Object.assign(fresh(), saved || {});
   // a restart shouldn't time out whoever was mid-decision
   if (S.hand && !S.hand.done) S.hand.dl = now() + TURN;
-  S.dealDl = 0; delete S.pausedAt; S.queue = S.queue || []; S.ante = S.ante || 100;
+  S.dealDl = 0; delete S.pausedAt; S.queue = S.queue || []; S.ante = S.ante || 100; S.sitout = S.sitout || {};
+  if (!S.lastGame && S.hand) S.lastGame = S.hand.g || 'holdem';
   // name history: everyone who has played here, bots excluded
   for (const n in S.players) if (!S.players[n].bot && !S.known[n]) S.known[n] = 1;
   S.forgot = S.forgot || {};
@@ -102,9 +103,10 @@ function createTable(saved, {now = Date.now, random = Math.random, shuffle = cry
   }
 
   // ---------- the dealer (button) deals the next hand and picks the blinds ----------
-  const eligible = i => { const n = S.seats[i]; return !!n && S.players[n].chips > 0 && !S.leave[n] };
+  // can play (and deal) the next game: seated, has chips, and hasn't chosen to sit this game out
+  const eligible = i => { const n = S.seats[i]; return !!n && S.players[n].chips > 0 && !S.leave[n] && !S.sitout[n] };
   function nextEligible(from) { for (let k = 1; k <= SEATS; k++) { const i = (from + k + SEATS) % SEATS; if (eligible(i)) return i } return -1 }
-  const canDeal = () => !live() && !S.again && !owed().length && S.seats.filter((n, i) => eligible(i)).length >= 2;
+  const canDeal = () => !live() && !S.again && !S.optin && !owed().length && S.seats.filter((n, i) => eligible(i)).length >= 2;
   // keep `dealer` on a seat that can deal, and run its 2-minute clock once dealing is possible (after the 10s pause)
   function dealerUpkeep() {
     if (live()) { S.dealDl = 0; return }
@@ -126,7 +128,7 @@ function createTable(saved, {now = Date.now, random = Math.random, shuffle = cry
       // push every deadline back by however long the clocks were frozen
       const d = now() - S.frozenAt, H = S.hand; S.frozenAt = 0;
       if (S.wait) S.wait += d; if (S.dealDl) S.dealDl += d; for (const n in S.bust) S.bust[n] += d;
-      if (H && H.dl) H.dl += d; if (H && H.nextAt) H.nextAt += d; if (botDealAt) botDealAt += d; if (S.again) S.again.until += d; if (botAt) botAt += d;
+      if (H && H.dl) H.dl += d; if (H && H.nextAt) H.nextAt += d; if (botDealAt) botDealAt += d; if (S.again) S.again.until += d; if (S.optin) S.optin.until += d; if (botAt) botAt += d;
     }
   }
   function stand(n) { const i = S.seats.indexOf(n); if (i >= 0) S.seats[i] = ''; delete S.leave[n]; delete S.bust[n]; delete S.buy[n]; if (S.players[n]) S.players[n].miss = 0 }
@@ -140,19 +142,24 @@ function createTable(saved, {now = Date.now, random = Math.random, shuffle = cry
   // ---------- betting ----------
   function nxt(f) { const H = S.hand, L = H.ps.length, o = H.ps.indexOf(f); for (let k = 1; k <= L; k++) { const s = H.ps[(o + k) % L]; if (!H.fold[s] && !H.allin[s]) return s } return -1 }
   function post(i, a) { const H = S.hand, p = S.players[S.seats[i]]; a = Math.max(0, Math.min(a, p.chips)); p.chips -= a; H.bet[i] += a; H.tot[i] += a; if (p.chips == 0) H.allin[i] = 1 }
-  function startHand() {
+  function dealBlocked() {
     if (live()) return 'Hand in progress';
     const o = owed(); if (o.length) return 'Waiting on ' + o.join(', ') + ' to get chips or stand up';
     if (S.again) return 'Waiting for players to ante again';
+    if (S.optin) return 'Waiting for players to say if they are in';
     if (now() < S.wait) return 'Next hand can be dealt in a moment';
     const p = Object.keys(S.pend); if (p.length) return 'Waiting for the host to seat ' + p.join(', ');
+    return '';
+  }
+  function startHand() {
+    const b = dealBlocked(); if (b) return b;
     const g = GAMES[S.game], nb = S.dealer >= 0 && eligible(S.dealer) ? S.dealer : nextEligible(S.btn);
     // remember everyone's chips, so the host can cancel this game and give them back
     const snap = takeSnap();
-    if (S.game == 'syn' || S.game == 'bts') { const e = S.game == 'syn' ? startSyn(nb) : startBts(nb); if (!e) S.snap = snap; return e }
-    const ps = []; for (let k = 1; k <= SEATS; k++) { const i = (nb + k) % SEATS, n = S.seats[i]; if (n && S.players[n].chips > 0) ps.push(i) }
+    if (S.game == 'syn' || S.game == 'bts') { const e = S.game == 'syn' ? startSyn(nb) : startBts(nb); if (!e) { S.snap = snap; S.lastGame = S.game } return e }
+    const ps = []; for (let k = 1; k <= SEATS; k++) { const i = (nb + k) % SEATS, n = S.seats[i]; if (n && S.players[n].chips > 0 && !S.sitout[n]) ps.push(i) }
     if (ps.length < 2) return 'Need at least 2 seated players with chips';
-    S.btn = S.dealer = nb; S.dealDl = 0; S.snap = snap; const d = shuffle();
+    S.btn = S.dealer = nb; S.dealDl = 0; S.snap = snap; S.lastGame = S.game; const d = shuffle();
     const h = {}, bet = {}, tot = {}; ps.forEach(i => { h[i] = Array.from({length: g.hole}, () => d.pop()); bet[i] = 0; tot[i] = 0 });
     const H = S.hand = {g: 'holdem', ps, btn: nb, d, board: [], h, bet, tot, fold: {}, allin: {}, acted: {}, stage: 0, cur: S.bb, minR: S.bb, turn: -1, done: 0, show: 0, msg: 'New hand'};
     const hu = ps.length == 2, sb = hu ? ps[1] : ps[0], bb = hu ? ps[0] : ps[1], first = hu ? ps[1] : ps[2 % ps.length];
@@ -216,7 +223,7 @@ function createTable(saved, {now = Date.now, random = Math.random, shuffle = cry
   // (hitting the post): pay double; chips can go below zero here. Next-door cards or a pair: no bet,
   // 10s pause. The same dealer deals until someone takes the last of the pot.
   function startBts(nb) {
-    const ps = []; for (let k = 1; k <= SEATS; k++) { const i = (nb + k) % SEATS, n = S.seats[i]; if (n && S.players[n].chips >= S.ante) ps.push(i) }
+    const ps = []; for (let k = 1; k <= SEATS; k++) { const i = (nb + k) % SEATS, n = S.seats[i]; if (n && S.players[n].chips >= S.ante && !S.sitout[n]) ps.push(i) }
     if (ps.length < 2) return 'Need at least 2 seated players who can cover the ante of ' + S.ante;
     S.btn = S.dealer = nb; S.dealDl = 0;
     ps.forEach(i => S.players[S.seats[i]].chips -= S.ante);
@@ -273,7 +280,7 @@ function createTable(saved, {now = Date.now, random = Math.random, shuffle = cry
   const holdsAce = i => S.hand.g == 'syn' && S.hand.cards && i in S.hand.cards && rank(S.hand.cards[i]) == ACE;
   const alive = () => S.hand.ps.filter(i => S.hand.lives[i] > 0);
   function startSyn(nb, only) {
-    const ps = []; for (let k = 1; k <= SEATS; k++) { const i = (nb + k) % SEATS, n = S.seats[i]; if (n && S.players[n].chips >= S.ante && (!only || only.includes(n))) ps.push(i) }
+    const ps = []; for (let k = 1; k <= SEATS; k++) { const i = (nb + k) % SEATS, n = S.seats[i]; if (n && S.players[n].chips >= S.ante && !S.sitout[n] && (!only || only.includes(n))) ps.push(i) }
     if (ps.length < 2) return 'Need at least 2 seated players who can cover the ante of ' + S.ante;
     S.btn = S.dealer = nb; S.dealDl = 0;
     const lives = {}; ps.forEach(i => { S.players[S.seats[i]].chips -= S.ante; lives[i] = LIVES });
@@ -351,6 +358,13 @@ function createTable(saved, {now = Date.now, random = Math.random, shuffle = cry
     if (ins.length >= 2) { S.ante = A.ante; S.game = 'syn'; const snap = takeSnap(); startSyn(A.btn, ins); S.snap = snap; S.hand.msg = 'New game! The pot carried over · ' + S.hand.msg }
     else if (S.hand) S.hand.msg = 'Not enough players to go again: the pot of ' + S.carry + ' waits for the next Screw Your Neighbor game';
   }
+  // the 20 seconds are up (or everyone answered): deal with whoever is in
+  function optResolve() {
+    const O = S.optin; S.optin = null;
+    for (const x of O.who) if (O.ans[x] == 'out') S.sitout[x] = 1;
+    if (S.game != O.game) return;
+    const e = startHand(); if (e && S.hand) S.hand.msg = "Couldn't start " + GAMES[O.game].name + ': ' + e;
+  }
   // standing up mid-game forfeits: out of the game now, ante stays in the pot, seat frees when the game ends
   function synForfeit(n) {
     const H = S.hand, i = S.seats.indexOf(n), al0 = alive(), k = al0.indexOf(i), wasTurn = H.stage == 'play' && H.turn === i;
@@ -377,11 +391,22 @@ function createTable(saved, {now = Date.now, random = Math.random, shuffle = cry
       const keep = [S.sb, S.bb, S.ante];
       if (S.game == 'syn' || S.game == 'bts') { const an = m.ante == null ? S.ante : int(m.ante), e0 = anteError(an); if (e0) return e0; S.ante = an }
       else { const bb = m.bb == null ? S.bb : int(m.bb), e0 = blindError(bb); if (e0) return e0; S.sb = bb / 2; S.bb = bb }
+      // a different game from last time: everyone else gets 20 seconds to say if they're in
+      if (S.lastGame && S.game != S.lastGame) {
+        const b = dealBlocked(); if (b) { [S.sb, S.bb, S.ante] = keep; return b }
+        S.sitout = {};
+        const need = S.game == 'holdem' ? 1 : S.ante;
+        const who = S.seats.filter(x => x && x != n && !S.players[x].bot && S.players[x].chips >= need && !S.leave[x]);
+        if (who.length) { S.optin = {game: S.game, dealer: n, until: now() + OPTIN, who, ans: {}}; S.dealDl = 0; return changed() }
+      }
       const e = startHand(); if (e) { [S.sb, S.bb, S.ante] = keep; return e }
     }
+    else if (m.t == 'optin') { const O = S.optin; if (!O || !O.who.includes(n)) return; O.ans[n] = m.in ? 'in' : 'out'; if (O.who.every(x => O.ans[x])) optResolve() }
+    else if (m.t == 'dealmein') { if (!S.sitout[n]) return; delete S.sitout[n] }
     else if (m.t == 'again') { if (!S.again) return; againAnswer(n, !!m.yes) }
     else if (m.t == 'game') {
       if (S.seats[S.dealer] !== n || live()) return "Only the dealer can change the game, between hands";
+      if (S.optin) return 'Players are choosing whether they are in';
       const g = GAMES[m.game]; if (!g || !g.ready) return "That game isn't available yet";
       S.game = m.game;
     }
@@ -447,6 +472,7 @@ function createTable(saved, {now = Date.now, random = Math.random, shuffle = cry
       act(n, a, H.cur + H.minR * (1 + (random() * 4 | 0)) + (random() < .1 ? p.chips : 0)); ch = 1;
     }
     if (S.again && t >= S.again.until) { againResolve(); ch = 1 }
+    if (S.optin && t >= S.optin.until) { optResolve(); ch = 1 }
     // Screw Your Neighbor: after the reveal, the next round deals itself
     if (syn() && live() && S.hand.stage == 'reveal' && t >= S.hand.nextAt) { synRound(); ch = 1 }
     // Between the Sheets: after a result (or a no-bet pause), the next player is dealt in
@@ -516,7 +542,7 @@ function createTable(saved, {now = Date.now, random = Math.random, shuffle = cry
     return {players, seats: S.seats, pend: S.pend, leave: S.leave, bust: S.bust, buy: S.buy, wait: S.wait, hand,
       btn: S.btn, dealer: S.dealer, dealDl: S.dealDl, sb: S.sb, bb: S.bb, ante: S.ante, game: S.game, gameName: GAMES[S.game].name,
       games: Object.entries(GAMES).map(([id, g]) => ({id, name: g.name, blurb: g.blurb, ready: !!g.ready})), n: S.n,
-      queue: S.queue, paused: S.frozenAt || 0, carry: S.carry || 0, again: S.again, hold: holdReason(),
+      queue: S.queue, paused: S.frozenAt || 0, carry: S.carry || 0, again: S.again, optin: S.optin, sitout: S.sitout, hold: holdReason(),
       canUndo: !!S.snap, known: Object.keys(S.known).sort((a, b) => S.known[b] - S.known[a])};
   }
   return {state: () => S, view, player, host, tick, remember, forget, reset, release};

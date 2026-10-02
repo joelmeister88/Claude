@@ -202,6 +202,7 @@ test('name history: remembers people (not bots), forget and reset', () => {
   assert.ok(!again.view('').known.includes('Jason'), 'a deleted default name stays deleted after a restart');
   t.reset();
   assert.deepEqual(t.view('').known, D, 'reset: just the regulars'); assert.deepEqual(t.state().players, {}); assert.ok(t.state().seats.every(x => !x));
+  t.player('Z', {t: 'sit'}); assert.equal(t.host({op: 'seat', name: 'Z'}), undefined, 'seating works right after a reset');
 });
 
 test('host pause freezes every clock and resume pushes deadlines back', () => {
@@ -619,6 +620,7 @@ test('the host can cancel a game, or undo the last one: chips go back to how the
   assert.equal(s.seats[s.dealer], 'A', 'the same dealer deals again');
   // a finished Hold'em hand can be undone too, until the next one starts
   t.player('A', {t: 'game', game: 'holdem'}); c.t += 10000; t.player('A', {t: 'deal'});
+  t.player('B', {t: 'optin', in: true}); t.player('C', {t: 'optin', in: true});
   for (let g = 0; g < 50 && !s.hand.done; g++) t.player(s.seats[s.hand.turn], {t: 'act', a: 'fold'});
   assert.notDeepEqual([s.players.A.chips, s.players.B.chips, s.players.C.chips], [1000, 1000, 1250]);
   t.host({op: 'cancel'});
@@ -655,4 +657,56 @@ test('switching to a different name frees the old one, unless it is mid-game', (
   assert.ok(!s.seats.includes('B'), 'stood up'); assert.ok(s.players.B.chips > 0, 'chips stay with the name');
   t.player('Q', {t: 'sit'}); t.release('Q');
   assert.ok(!s.pend.Q, 'a seat request is dropped');
+});
+
+test('a new game: everyone gets 20 seconds to sit it out, without standing up', () => {
+  const c = clock(), t = createTable(null, {now: c});
+  for (const n of ['A', 'B', 'C', 'D']) { t.player(n, {t: 'sit'}); t.host({op: 'seat', name: n}) }
+  t.host({op: 'bot'});
+  const s = t.state();
+  t.player('A', {t: 'deal'});                                  // the first game: nobody is asked
+  assert.ok(s.hand && !s.hand.done && !t.view('').optin, 'dealt straight away');
+  for (let g = 0; g < 50 && !s.hand.done; g++) t.player(s.seats[s.hand.turn], {t: 'act', a: 'fold'});
+  c.t += 10000; t.tick();
+  const dealer = s.seats[s.dealer];
+  t.player(dealer, {t: 'game', game: 'syn'});
+  t.player(dealer, {t: 'deal', ante: 200});
+  const O = t.view('').optin;
+  assert.ok(O && O.game == 'syn' && O.until == c.t + 20000, 'a 20 second window');
+  assert.deepEqual([...O.who].sort(), ['A', 'B', 'C', 'D'].filter(x => x != dealer).sort(), 'everyone but the dealer and the bots');
+  assert.ok(!s.hand || s.hand.done, 'not dealt yet');
+  assert.match(t.player(dealer, {t: 'game', game: 'bts'}), /choosing/);
+  const [x, y, z] = O.who;
+  t.player(x, {t: 'optin', in: false});
+  t.player(y, {t: 'optin', in: true});
+  c.t += 19999; t.tick(); assert.ok(t.view('').optin, 'still waiting on one');
+  c.t += 1; t.tick();                                           // z never answered: in
+  const H = s.hand;
+  assert.equal(H.g, 'syn');
+  const playing = H.ps.map(i => s.seats[i]);
+  assert.ok(!playing.includes(x) && playing.includes(y) && playing.includes(z) && playing.includes(dealer) && playing.includes('Bot 1'));
+  assert.ok(s.seats.includes(x), 'sitting out is not standing up');
+  assert.equal(s.players[x].chips, 1000, 'no ante');
+  // still sitting out the next Screw Your Neighbor game, until they ask back in
+  H.done = 1; c.t += 20000; t.tick();
+  assert.notEqual(s.seats[s.dealer], x, "someone sitting out isn't made dealer");
+  t.player(x, {t: 'dealmein'});
+  assert.ok(!s.sitout[x]);
+});
+
+test('dealing the same game again asks nobody; everyone answering starts it at once', () => {
+  const c = clock(), t = createTable(null, {now: c});
+  for (const n of ['A', 'B', 'C']) { t.player(n, {t: 'sit'}); t.host({op: 'seat', name: n}) }
+  const s = t.state();
+  t.player('A', {t: 'deal'});
+  for (let g = 0; g < 50 && !s.hand.done; g++) t.player(s.seats[s.hand.turn], {t: 'act', a: 'fold'});
+  c.t += 10000; t.tick();
+  t.player(s.seats[s.dealer], {t: 'deal'});
+  assert.ok(!t.view('').optin && !s.hand.done, "same game: dealt straight away");
+  for (let g = 0; g < 50 && !s.hand.done; g++) t.player(s.seats[s.hand.turn], {t: 'act', a: 'fold'});
+  c.t += 10000; t.tick();
+  const d = s.seats[s.dealer]; t.player(d, {t: 'game', game: 'bts'}); t.player(d, {t: 'deal'});
+  for (const x of t.view('').optin.who) t.player(x, {t: 'optin', in: true});
+  assert.equal(s.hand.g, 'bts', 'everyone answered: no need to wait');
+  assert.equal(s.hand.ps.length, 3);
 });

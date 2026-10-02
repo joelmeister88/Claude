@@ -54,6 +54,18 @@ ok(/No bet: next-door cards\. Next player in \d+s/.test(await P.p.textContent('#
 await pretend(h => Object.assign(h, {stage: 'skip', why: 'same value', cards: {lo: 5, hi: 18, mid: null}}));
 ok((await P.p.textContent('#main')).includes('No bet: same value'), 'a pair: no bet');
 
+// a new game: the 20 second 'are you in?' prompt, and sitting out
+async function craft(edit) { const f = JSON.parse(JSON.stringify(P.last())); f.s.hand.done = 1; edit(f.s, f.now); f.s.n += 2000; await P.p.evaluate(m => ws.onmessage({data: JSON.stringify(m)}), f) }
+await craft((s, now) => { s.optin = {game: 'syn', dealer: 'Hana', until: now + 20000, who: ['Pat'], ans: {}}; s.ante = 300 });
+ok(/Hana is dealing Screw Your Neighbor/.test(await P.p.textContent('#main')) && (await P.p.textContent('#main')).includes('Ante 300'), 'asked: Hana is dealing Screw Your Neighbor (ante 300)');
+ok(await P.p.isVisible('[data-a=optin1]') && await P.p.isVisible('[data-a=optin0]') && /starts in \d+s · 1 in/.test(await P.p.textContent('.info')), "I'm in / Sit this one out, with a countdown");
+ok(await P.p.$eval('#main .p', e => e.classList.contains('turn')), 'panel turns red until you answer');
+await craft((s, now) => { s.optin = {game: 'syn', dealer: 'Hana', until: now + 15000, who: ['Pat'], ans: {Pat: 'out'}} });
+ok((await P.p.textContent('#main')).includes("You're sitting this one out. You keep your seat.") && /1 out/.test(await P.p.textContent('.info')), 'your choice is shown and can be changed');
+await craft(s => { s.optin = null; s.sitout = {Pat: 1} });
+ok((await P.p.textContent('#main')).includes("You're sitting out") && await P.p.isVisible('[data-a=dealmein]'), 'sitting out: Deal me in');
+ok((await P.p.textContent('.st.me')).includes('sitting out'), 'your seat says sitting out');
+
 // the rules tab
 await P.p.click('[data-a=rules]'); await P.p.click('[data-a=rulesgame][data-v=bts]');
 ok((await P.p.textContent('#rules')).includes('Hitting the post'), 'rules: Between the Sheets');

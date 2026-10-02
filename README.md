@@ -27,6 +27,8 @@ npm start
 
 - **Between the Sheets**: the dealer picks one ante (100 or more, in steps of 100). From the dealer's left (dealer last), round and round, each player gets two cards face up (Aces always high) and bets, in 100s up to the whole pot, that the next card lands between them, or passes for free. Between: win the bet from the pot. Outside: pay it in. Same value as either card (hitting the post): pay double, which can go below zero; a player below zero can't join a new game until they're back above it. Next-door cards or a pair: no bet, 10 second pause. The same dealer deals until someone takes the whole pot.
 
+When the dealer switches to a different game, everyone else gets 20 seconds to tap **I'm in** or **Sit this one out** (no answer means in). Sitting out keeps your seat and skips the ante/blinds for as long as that game keeps being dealt; **Deal me in** rejoins from the next one.
+
 Tap **📖** at the top for the full rules and tips for each game.
 
 New players are asked for their first name and last initial. Returning players tap their name from the saved list, which brings back their chips. Bots aren't saved.
