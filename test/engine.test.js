@@ -880,3 +880,18 @@ test('5 Card Draw: whatever the ante, bets and raises go up in steps of 100', ()
   t.player(s.seats[H.turn], {t: 'act', a: 'raise', amt: 230});
   assert.equal(H.cur, 300, 'a raise is at least 100 more');
 });
+
+test('7 Card No Peek: whatever the ante, bets and raises go up in steps of 100', () => {
+  const c = clock(), t = createTable(null, {now: c});
+  for (const n of ['A', 'B', 'C']) { t.player(n, {t: 'sit'}); t.host({op: 'seat', name: n}) }
+  const s = t.state(), d = s.seats[s.dealer]; t.player(d, {t: 'game', game: 'nopeek'}); t.player(d, {t: 'deal', ante: 300});
+  for (const x of t.view('').optin ? t.view('').optin.who : []) t.player(x, {t: 'optin', in: true});
+  const H = s.hand; assert.equal(H.g, 'nopeek');
+  let g = 0; while (H.stage == 'flip' && !H.done && g++ < 30) t.player(s.seats[H.turn], {t: 'act', a: 'flip'});
+  if (H.done) return; // rare: nobody could beat the dealer's card
+  assert.equal(H.stage, 'bet');
+  t.player(s.seats[H.turn], {t: 'act', a: 'raise', amt: 50});
+  assert.equal(H.cur, 100, 'the smallest bet is 100, not the 300 ante');
+  t.player(s.seats[H.turn], {t: 'act', a: 'raise', amt: 250});
+  assert.equal(H.cur, 200, 'rounded down to a step of 100');
+});

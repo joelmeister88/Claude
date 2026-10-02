@@ -343,8 +343,8 @@ function createTable(saved, {now = Date.now, random = Math.random, shuffle = cry
       let to = a == 'raise' ? int(amt) || 0 : 0; const mx = b + p.chips; to = Math.min(to, mx);
       if (a != 'raise' || to <= H.cur) { post(t, need); H.msg = n + (need > 0 ? ' calls ' + Math.min(need, b + p.chips) : ' checks') }
       else {
-        // bets go up in steps of the big blind (Hold'em), of 100 (5 Card Draw) or of the ante (No Peek); all-in can be any amount
-        const step = draw() ? 100 : np() ? S.ante : S.bb, least = Math.ceil((H.cur + step) / step) * step;
+        // bets go up in steps of the big blind (Hold'em) or of 100 (5 Card Draw, No Peek); all-in can be any amount
+        const step = draw() || np() ? 100 : S.bb, least = Math.ceil((H.cur + step) / step) * step;
         if (to < mx) to = Math.min(Math.max(least, Math.floor(to / step) * step), mx);
         H.cur = to; H.acted = {}; post(t, to - b); H.msg = n + (H.allin[t] ? ' is all-in ' : ' raises to ') + to;
       }
