@@ -46,14 +46,17 @@ ok(await P.p.evaluate(() => { const a = document.querySelector('.mid').getBoundi
 if (await F.p.$('.cb.go')) await F.p.click('.cb.go >> nth=0'); // (unless that one tap already took the lead)
 await F.p.waitForFunction(() => document.querySelectorAll('.p .c.nk:not(.b)').length >= 1);
 ok((await O.p.$$eval('.rs', e => e.length)) >= 1, 'a flipped card is seen by everyone');
+let leaderNote = '';
 for (let i = 0; i < 40 && !P.last().s.hand.done; i++) {
   for (const x of [H, P]) { const st = x.last().s.hand; const me = x == H ? 'Hana' : 'Pat';
     if (st.done || x.last().s.seats[st.turn] != me) continue;
+    if (st.stage == 'bet' && st.best == st.turn && !leaderNote) leaderNote = await x.p.$eval('#main', e => (e.textContent.match(/You took the lead with [^!]+! Bet, or check\./) || [''])[0]).catch(() => '');
     // look the button up at click time (the page may have redrawn since the last update)
     const sel = st.stage == 'flip' ? '.cb.go' : '[data-a=call]';
     if (await x.p.$(sel)) await x.p.locator(sel).first().click({timeout: 2000}).catch(() => {}) }
   await P.p.waitForTimeout(150);
 }
+ok(leaderNote, 'the new leader is told to bet or check: ' + leaderNote);
 ok(P.last().s.hand.done == 1, 'the hand finishes with a winner: ' + P.last().s.hand.msg);
 ok(H.errs.length + P.errs.length == 0, 'no page errors: ' + [...H.errs, ...P.errs].join('; '));
 await browser.close(); srv.kill(); process.exit(fails ? 1 : 0);

@@ -913,3 +913,27 @@ test('7 Card No Peek: the card you tap is the card that flips', () => {
     assert.equal(t.view('C').hand.h[i].filter(x => x !== null).length, 2);
   } else assert.equal(t.player(n, {t: 'act', a: 'flip', idx: 1}), undefined, 'an extra tap after taking the lead is quietly ignored');
 });
+
+test('7 Card No Peek: every time someone takes the lead, they get to bet (hundreds of games)', () => {
+  let leads = 0;
+  for (let g = 1; g <= 150; g++) {
+    const c = clock(); let seed = g * 7919; const random = () => (seed = seed * 16807 % 2147483647) / 2147483647;
+    const t = createTable(null, {now: c, random, shuffle: () => { const d = [...Array(52).keys()]; for (let i = 51; i > 0; i--) { const j = random() * (i + 1) | 0; [d[i], d[j]] = [d[j], d[i]] } return d }});
+    const names = ['A', 'B', 'C', 'D'].slice(0, 2 + g % 3);
+    for (const n of names) { t.player(n, {t: 'sit'}); t.host({op: 'seat', name: n}) }
+    const s = t.state(), d = s.seats[s.dealer]; t.player(d, {t: 'game', game: 'nopeek'}); t.player(d, {t: 'deal', ante: 100});
+    const H = s.hand;
+    for (let k = 0; k < 400 && !H.done; k++) {
+      const n = s.seats[H.turn], i = H.turn;
+      if (H.stage == 'flip') {
+        const before = H.best; t.player(n, {t: 'act', a: 'flip'});
+        if (!H.done && H.best === i && before !== i && H.stage == 'bet') {
+          leads++;
+          const others = H.ps.filter(j => j != i && !H.fold[j] && !H.allin[j]);
+          if (!H.allin[i] && others.length) assert.equal(H.turn, i, 'the new leader acts first in the betting round');
+        }
+      } else t.player(n, {t: 'act', a: k % 4 ? 'call' : 'raise', amt: 100});
+    }
+  }
+  assert.ok(leads > 150, 'checked ' + leads + ' times someone took the lead');
+});
