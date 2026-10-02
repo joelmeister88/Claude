@@ -735,11 +735,14 @@ test('5 Card Draw: bet, draw, bet again, showdown; the dealer picks the wild val
   for (const n of ['A', 'B', 'C']) { t.player(n, {t: 'sit'}); t.host({op: 'seat', name: n}) }
   const s = t.state();
   const dealer = s.seats[s.dealer]; t.player(dealer, {t: 'game', game: 'draw'});
-  assert.equal(t.player(dealer, {t: 'deal', bb: 10, wild: 99}), 'Pick a wild card');
-  t.player(dealer, {t: 'deal', bb: 10, wild: 5});
+  assert.equal(t.player(dealer, {t: 'deal', ante: 100, wild: 99}), 'Pick a wild card');
+  assert.match(t.player(dealer, {t: 'deal', ante: 50, wild: 5}), /Ante must be 100/);
+  assert.match(t.player(dealer, {t: 'deal', ante: 150, wild: 5}), /steps of 100/);
+  t.player(dealer, {t: 'deal', ante: 100, wild: 5});
   for (const x of t.view('').optin ? t.view('').optin.who : []) t.player(x, {t: 'optin', in: true});
   const H = s.hand; assert.equal(H.g, 'draw'); assert.equal(H.wild, 5);
   assert.ok(H.ps.every(i => H.h[i].length == 5));
+  assert.equal(Object.values(H.tot).reduce((x, y) => x + y, 0), 300, 'one 100 ante each makes the pot'); assert.equal(H.cur, 0);
   const v = t.view(s.seats[H.ps[0]]); assert.equal(v.hand.d, undefined); assert.equal(v.hand.disc, undefined);
   assert.equal(t.view('').hand.h[H.ps[0]].every(x => x === null), true);
   let guard = 0; while (H.stage == 0 && guard++ < 20) t.player(s.seats[H.turn], {t: 'act', a: 'call'});
@@ -759,7 +762,7 @@ test('5 Card Draw: bet, draw, bet again, showdown; the dealer picks the wild val
 test('5 Card Draw: a draw that outruns the deck recycles the discards', () => {
   const c = clock(), t = createTable(null, {now: c});
   for (let i = 1; i <= 10; i++) { t.player('P' + i, {t: 'sit'}); t.host({op: 'seat', name: 'P' + i}) }
-  const s = t.state(), d = s.seats[s.dealer]; t.player(d, {t: 'game', game: 'draw'}); t.player(d, {t: 'deal', bb: 10, wild: -1});
+  const s = t.state(), d = s.seats[s.dealer]; t.player(d, {t: 'game', game: 'draw'}); t.player(d, {t: 'deal', ante: 100, wild: -1});
   for (const x of t.view('').optin ? t.view('').optin.who : []) t.player(x, {t: 'optin', in: true});
   const H = s.hand; let g = 0; while (H.stage == 0 && g++ < 40) t.player(s.seats[H.turn], {t: 'act', a: 'call'});
   g = 0; while (H.stage == 1 && g++ < 12) t.player(s.seats[H.turn], {t: 'act', a: 'draw', idx: [0, 1, 2, 3, 4]});
