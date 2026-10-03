@@ -56,7 +56,7 @@ small,.m{opacity:.7}h4{margin:8px 0 2px}
 <script>
 'use strict';
 const $=s=>document.querySelector(s),SU='♠♥♦♣',RK='  23456789TJQKA';
-let ws,S=null,me='',token='',hostKey='',host=false,admin=false,renaming=false,showKey=false,arm='',dealStep=0,dbb=0,dan=0,bta=0,rtMin=0,rtMax=0,rtStep=10,picking=false,lastPend=0,lastDeal=0,off=0,rt=0,peekT=0,snd='all',theme='',AC,lastN=-1,lastTurn='',curHid=0,doneFired=1,dsel=[],dselKey='',dwl=-2,wildR=[],addAmt={},adjFor='',noteT,retry=0;
+let ws,S=null,me='',token='',hostKey='',host=false,admin=false,renaming=false,showKey=false,arm='',dealStep=0,dbb=0,dan=0,bta=0,rtMin=0,rtMax=0,rtStep=10,picking=false,lastPend=0,lastDeal=0,off=0,rt=0,peekT=0,snd='all',theme='',AC,lastN=-1,lastTurn='',curHid=0,doneFired=1,dsel=[],dselKey='',dwl=-2,wildR=[],addAmt={},adjFor='',noteT,retry=0,namesOpen=false,editName='';
 try{token=localStorage.getItem('pn_token')||'';hostKey=localStorage.getItem('pn_host')||'';snd=localStorage.getItem('pn_snd')||'all';theme=localStorage.getItem('pn_theme')||''}catch(e){}
 // the admin link is /#host=KEY: remember the key on this device, then drop it from the address bar
 {const m=location.hash.match(/host=([^&]+)/);if(m){try{hostKey=decodeURIComponent(m[1])}catch(e){hostKey=m[1]}try{localStorage.setItem('pn_host',hostKey)}catch(e){}history.replaceState(null,'',location.pathname)}}
@@ -221,8 +221,14 @@ function renderLobby(){const on=S.online||[],q=S.queue||[],away=Object.keys(S.pl
  put($('#lobby'),`<div class="p"><small>👑 Host: <b>${esc(S.hostName||'nobody yet')}</b></small>${q.length?`<h4>Waiting list</h4>${q.map((n,k)=>`<div class="row" style="margin-top:2px"><span style="flex:1">${k+1}. ${esc(n)}${on.includes(n)?'<i class="dot" title="online"></i>':''}${n===me?' <small>(you)</small>':''}</span></div>`).join('')}`:''}${away.length?`<h4>Not at the table</h4>${away.map(n=>`<div class="row" style="margin-top:2px"><span style="flex:1">${esc(n)}${on.includes(n)?'<i class="dot" title="online"></i>':''}${S.pend[n]?' <small>(wants a seat)</small>':''}</span><b>${S.players[n].chips}</b></div>`).join('')}`:''}</div>`)}
 function renderAdmin(){const e=$('#admin'),f=document.activeElement;if(f&&f.tagName=='INPUT'&&e.contains(f))return;
  if(!admin){put(e,showKey?`<div class="p"><b>Admin</b><div class="row"><input id="ak" type="password" placeholder="Password" style="flex:1" autocomplete="current-password"><button class="g" data-a="unlock">Unlock</button></div></div>`:'<div class="row" style="justify-content:center"><button class="lnk" data-a="showkey">Admin</button></div>');return}
- const names=(S.known||[]).map(n=>`<div class="row" style="margin-top:2px"><span style="flex:1">${esc(n)} ${S.players[n]?`<small>${S.players[n].chips} chips</small>`:''}</span><button data-a="forget" data-v="${esc(n)}" ${arm=='f:'+n?'class="r">Delete?':'>✕'}</button></div>`).join('');
- put(e,`<div class="p"><b>Admin</b><div class="row">${host?'<small>You are the host.</small>':'<button class="g" data-a="takeover">Become host</button>'}<button data-a="reset" ${arm=='reset'?'class="r">Tap again to erase everything':'>Reset table'}</button></div><h4>Saved names</h4>${names||'<small>None yet</small>'}</div>`)}
+ const known=S.known||[];
+ // saved names live on their own screen so the admin panel stays small
+ if(namesOpen){
+  const rows=known.map(n=>{const v=esc(n),c=S.players[n]?`<small>${S.players[n].chips} chips</small>`:'';
+   return editName==n?`<div class="row" style="margin-top:2px"><input id="nren" maxlength="12" value="${v}" style="flex:1;min-width:0"><button class="g" data-a="renok" data-v="${v}">Save</button><button data-a="renno">✕</button></div>`
+   :`<div class="row" style="margin-top:2px"><span style="flex:1">${v} ${c}</span><button data-a="ren" data-v="${v}" aria-label="Change ${v}">✎</button><button data-a="forget" data-v="${v}" ${arm=='f:'+n?'class="r">Delete?':`aria-label="Delete ${v}">✕`}</button></div>`}).join('');
+  return put(e,`<div class="p"><div class="row"><b style="flex:1">Saved names</b><button data-a="namesback">Back</button></div><div class="row"><input id="nadd" maxlength="12" placeholder="Add a name" style="flex:1;min-width:0"><button class="g" data-a="nameadd">Add</button></div>${rows||'<small>None yet</small>'}<small>✎ changes a name (chips stay with it). ✕ deletes it with its saved chips.</small></div>`)}
+ put(e,`<div class="p"><b>Admin</b><div class="row">${host?'<small>You are the host.</small>':'<button class="g" data-a="takeover">Become host</button>'}<button data-a="reset" ${arm=='reset'?'class="r">Tap again to erase everything':'>Reset table'}</button></div><div class="row full"><button data-a="names">Saved names (${known.length}) ›</button></div></div>`)}
 function renderHost(){const e=$('#host'),f=document.activeElement;if(!host)return put(e,'');if(!S||(f&&f.tagName=='INPUT'&&e.contains(f)))return;const H=S.hand;
  const pend=Object.keys(S.pend).map(n=>{const v=addAmt[n]??(S.players[n].chips>0?0:1000);return`<div class="row"><b>${esc(n)}</b><span class="m">saved ${S.players[n].chips}</span> +<input data-add="${esc(n)}" type="number" value="${esc(v)}"><button class="g" data-a="ok" data-v="${esc(n)}">Seat</button><button data-a="no" data-v="${esc(n)}">✕</button></div>`}).join('');
  const buy=Object.keys(S.buy).map(n=>{const v=addAmt[n]??1000;return`<div class="row"><b>${esc(n)}</b><span class="m">has ${S.players[n].chips}</span> +<input data-add="${esc(n)}" type="number" value="${esc(v)}"><button class="g" data-a="give" data-v="${esc(n)}">Give</button><button data-a="nobuy" data-v="${esc(n)}">✕</button></div>`}).join('');
@@ -268,6 +274,12 @@ document.addEventListener('click',async e=>{const b=e.target.closest('[data-a]')
  else if(a=='unlock'){const k=$('#ak').value;if(k)send({t:'admin',key:k})}
  else if(a=='takeover')send({t:'admin',op:'takeover'});
  else if(a=='reset'){if(arm=='reset'){arm='';send({t:'admin',op:'reset'})}else{arm='reset';renderAdmin()}}
+ else if(a=='names'){namesOpen=true;editName='';arm='';renderAdmin()}
+ else if(a=='namesback'){namesOpen=false;editName='';arm='';renderAdmin()}
+ else if(a=='nameadd'){const n=$('#nadd').value.trim();if(n){send({t:'admin',op:'addname',name:n});$('#nadd').value='';$('#nadd').blur()}}
+ else if(a=='ren'){editName=v;arm='';renderAdmin();const i=$('#nren');if(i){i.focus();i.select()}}
+ else if(a=='renno'){editName='';$('#nren')?.blur();renderAdmin()}
+ else if(a=='renok'){const n=$('#nren').value.trim();editName='';$('#nren').blur();if(n&&n!=v)send({t:'admin',op:'rename',from:v,name:n});renderAdmin()}
  else if(a=='forget'){if(arm=='f:'+v){arm='';send({t:'admin',op:'forget',name:v})}else{arm='f:'+v;renderAdmin()}}
  else if(a=='share'){const ok=await copy(LINK);b.textContent=ok?'✓ Copied':'Copy failed';if(!ok)note('Copy this link: '+LINK);setTimeout(()=>b.textContent='🔗 Share',1500)}
  else if(a=='snd'){snd=snd=='all'?'vib':snd=='vib'?'off':'all';try{localStorage.setItem('pn_snd',snd)}catch(x){}skin();if(snd=='all')play('turn');else if(snd=='vib')buzz(200)}
@@ -298,7 +310,7 @@ document.addEventListener('click',async e=>{const b=e.target.closest('[data-a]')
  else if(a=='adj'){adjFor=v;render();const i=$('[data-adjin]');i&&i.focus()}
  else if(a=='adjok'){const x=$('[data-adjin]').value;adjFor='';hs('adj',{name:v,x});render()}});
 document.addEventListener('focusout',e=>{const t=e.target;if(t.id=='dbb'){setBB(t.value);setTimeout(render,300)}if(t.id=='dan'){setAnte(t.value);setTimeout(render,300)}if(t.id=='bta'&&S&&S.hand){setBet(t.value,S.hand.pot);setTimeout(render,300)}if(t.id=='rt'){rt=rtSnap(t.value);t.value=rt}});
-document.addEventListener('keydown',e=>{if(e.key!='Enter')return;if(e.target.id=='nm')$('[data-a=name]').click();if(e.target.id=='ak')$('[data-a=unlock]').click()});
+document.addEventListener('keydown',e=>{if(e.key!='Enter')return;if(e.target.id=='nm')$('[data-a=name]').click();if(e.target.id=='ak')$('[data-a=unlock]').click();if(e.target.id=='nadd')$('[data-a=nameadd]').click();if(e.target.id=='nren')$('[data-a=renok]').click()});
 document.addEventListener('change',e=>{if(e.target.id=='dwl')dwl=+e.target.value});
 document.addEventListener('input',e=>{const t=e.target;if(t.id=='rt'){if(+t.value>rtMax)t.value=rtMax;rt=+t.value}if(t.id=='dbb'){const l=$('#sbl');if(l)l.textContent='Small blind '+snap(t.value)/2}if(t.dataset.add)addAmt[t.dataset.add]=t.value});
 // ---------- rules & tips ----------

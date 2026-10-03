@@ -683,6 +683,23 @@ function createTable(saved, {now = Date.now, random = Math.random, shuffle = cry
     if (!(n in S.known) && !S.players[n]) return 'No such name';
     delete S.known[n]; delete S.players[n]; S.forgot[n] = 1; S.queue = S.queue.filter(x => x != n); changed();
   }
+  /** Add a name to the history (the admin's saved names). */
+  function addName(n) {
+    if (n in S.known || S.players[n]) return n + ' is already saved';
+    delete S.forgot[n]; S.known[n] = 0; changed();
+  }
+  /** Change a saved name, keeping its chips. Not while that name is at the table. */
+  function renameName(o, n) {
+    if (!(o in S.known) && !S.players[o]) return 'No such name';
+    if (o == n) return;
+    if (n in S.known || S.players[n]) return n + ' is already saved';
+    if (S.seats.includes(o) || S.pend[o] || S.queue.includes(o)) return o + ' is at the table: stand them up first';
+    if (o in S.known) { S.known[n] = S.known[o]; delete S.known[o] }
+    if (S.players[o]) { S.players[n] = S.players[o]; delete S.players[o] }
+    if (S.snap && o in S.snap.chips) { S.snap.chips[n] = S.snap.chips[o]; delete S.snap.chips[o] }
+    for (const k of ['buy', 'bust', 'sitout']) if (S[k] && o in S[k]) { S[k][n] = S[k][o]; delete S[k][o] }
+    delete S.forgot[n]; S.forgot[o] = 1; changed();
+  }
   /** Start over: no players, no chips, no history. */
   function reset() { for (const k of Object.keys(S)) delete S[k]; Object.assign(S, fresh()); seedNames(); botAt = 0; changed() }
   /** What one viewer may see: no deck, and hole cards only for themselves (and live hands at showdown). */
@@ -713,7 +730,7 @@ function createTable(saved, {now = Date.now, random = Math.random, shuffle = cry
       queue: S.queue, paused: S.frozenAt || 0, carry: S.carry || 0, again: S.again, optin: S.optin, sitout: S.sitout, hold: holdReason(),
       canUndo: !!S.snap, known: Object.keys(S.known).sort((a, b) => S.known[b] - S.known[a])};
   }
-  return {state: () => S, view, player, host, tick, remember, forget, reset, release};
+  return {state: () => S, view, player, host, tick, remember, forget, addName, renameName, reset, release};
 }
 
 module.exports = {createTable, best, bestW, scoreAny, s5, category, WAIT, BUST, TURN, SEATS};

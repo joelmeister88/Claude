@@ -188,6 +188,18 @@ test('a bot dealer deals by itself when a person is playing', () => {
   assert.ok(t.state().hand && !t.state().hand.done);
 });
 
+test('saved names: the admin adds and changes names, chips follow the name', () => {
+  const t = createTable({players: {Old: {chips: 300}}}, {now: clock()});
+  assert.equal(t.addName('Zed'), undefined); assert.ok(t.view('').known.includes('Zed'));
+  assert.match(t.addName('Zed'), /already saved/);
+  assert.equal(t.renameName('Old', 'New'), undefined);
+  assert.equal(t.state().players.New.chips, 300); assert.ok(!t.state().players.Old);
+  assert.ok(t.view('').known.includes('New') && !t.view('').known.includes('Old'));
+  assert.match(t.renameName('New', 'Zed'), /already saved/);
+  assert.match(t.renameName('Nobody', 'X'), /No such name/);
+  t.player('Pat', {t: 'sit'}); assert.match(t.renameName('Pat', 'Pam'), /at the table/);
+  t.forget('Jason'); assert.equal(t.addName('Jason'), undefined, 'a deleted name can be added back');
+});
 test('name history: remembers people (not bots), forget and reset', () => {
   const D = ['Joel', 'Jesi', 'Paul', 'Kate', 'Branson', 'Shane', 'Darrin', 'Jennifer', 'Mitchell', 'Shay', 'Sam', 'Kelli', 'Jason'];
   const c = clock(), t = createTable({players: {Old: {chips: 300}, 'Bot 1': {chips: 5, bot: 1}}}, {now: c});

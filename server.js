@@ -118,6 +118,19 @@ wss.on('connection', (ws, req) => {
         for (const k in auth) if (auth[k] == n) delete auth[k];
         for (const o of clients) if (o.name == n) o.name = ''; persist();
       }
+      else if (m.op == 'addname' || m.op == 'rename') {
+        const n = cleanName(m.name);
+        if (!n) return err('Pick a name using letters or numbers');
+        if (isBotName(n)) return err('That name is reserved for bots');
+        if (m.op == 'addname') { const e = table.addName(n); if (e) return err(e) }
+        else {
+          const o = String(m.from || ''), e = table.renameName(o, n); if (e) return err(e);
+          // devices signed in as the old name carry on as the new one
+          for (const k in auth) if (auth[k] == o) auth[k] = n;
+          for (const x of clients) if (x.name == o) x.name = n;
+        }
+        persist();
+      }
       return broadcast();
     }
     if (m.t == 'name') {

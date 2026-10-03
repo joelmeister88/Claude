@@ -184,11 +184,20 @@ await Y.p.waitForSelector('text=+ Bot');
 await H.p.waitForFunction(() => !document.querySelector('[data-a=bot]'));
 ok(Y.last().s.hostName == 'Pat', 'admin can take over as host');
 
+// saved names sit behind one button; there the admin can add, change and delete names
+ok(!(await Y.p.$('[data-a=forget]')), 'saved names are not listed on the main admin panel');
+await Y.p.click('[data-a=names]');
+await Y.p.fill('#nadd', 'Zed'); await Y.p.press('#nadd', 'Enter');
+await Y.p.waitForSelector('[data-a=ren][data-v="Zed"]');
+await Y.p.click('[data-a=ren][data-v="Zed"]'); await Y.p.fill('#nren', 'Zoe'); await Y.p.click('[data-a=renok]');
+await Y.p.waitForSelector('[data-a=ren][data-v="Zoe"]');
+ok(Y.last().s.known.includes('Zoe') && !Y.last().s.known.includes('Zed'), 'admin can add and change a saved name');
 // admin deletes a saved name; that device goes back to the name screen
 await Y.p.click('[data-a=forget][data-v="Hana"]'); await Y.p.click('[data-a=forget][data-v="Hana"]');
 await H.p.waitForSelector('#nm');
 await Y.p.waitForTimeout(300);
 ok(!Y.last().s.known.includes('Hana'), 'admin can delete a saved name');
+await Y.p.click('[data-a=namesback]'); await Y.p.waitForSelector('text=Reset table');
 
 // reset: everything goes
 const R = await player('Rae'); await R.p.waitForSelector('button:text-is("Sit Down")');
