@@ -96,6 +96,14 @@ if (await P.p.$('[data-a=fold]')) { await checkTurn(); await P.p.click('[data-a=
 
 // the button moves left to Pat, who deals after the 10s pause with blinds of their choosing
 await P.p.waitForSelector("text=You're the dealer");
+// the game log: the hand that just finished, newest first, in a scrolling window
+await P.p.click('[data-a=log]'); await P.p.waitForSelector('#log h3:has-text("Texas Hold\'em")');
+const logTxt = await P.p.textContent('#log');
+ok(/Game \d+ · Texas Hold'em/.test(logTxt) && logTxt.includes('posts the big blind') && logTxt.includes('Result:'), 'the log shows the last hand: blinds, actions and the result');
+const lastLog = P.frames.filter(f => f.t == 'log').at(-1).log, hand1 = P.frames.filter(f => f.t == 'state' && f.s.hand && f.s.hand.done).at(-1).s.hand;
+ok(hand1.show || !lastLog.some(R => R.ev && R.ev.some(e => e.c && e.c.some(c => (hand1.h[hand1.ps.find(i => P.last().s.seats[i] == 'Pat')] || []).includes(c)))), "no one's hidden cards are in the log");
+ok(await P.p.$eval('#log', e => getComputedStyle(e).overflowY == 'auto'), 'the log window scrolls');
+await P.p.click('[data-a=closelog]'); ok(await P.p.isHidden('#log'), 'Close hides the log');
 ok((await P.p.textContent('[data-a=dealgo]')).includes("Deal: Texas Hold'em") && await P.p.isVisible('[data-a=pickgame]'), "step 1: 'Deal: Texas Hold'em' next to Change game");
 await P.p.click('[data-a=dealgo]');
 ok((await P.p.textContent('#main')).includes('Choose the blind, then Deal'), 'step 2: choose the blind');

@@ -147,6 +147,8 @@ wss.on('connection', (ws, req) => {
       auth[c.token] = n; c.name = n; claimHost(c); persist();
       send(c, {t: 'token', token: c.token}); table.remember(n); return broadcast();
     }
+    // the game log is only sent when someone opens it (it's too big to send with every change)
+    if (m.t == 'log') return send(c, {t: 'log', log: table.log()});
     if (m.t == 'host') { if (!isHost(c)) return err('Only the host can do that'); const e = table.host(m); return e && err(e) }
     if (!c.name) return err('Enter your name first');
     const e = table.player(c.name, m); if (e) err(e);

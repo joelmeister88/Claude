@@ -43,7 +43,8 @@ button{cursor:pointer;font-weight:600;min-height:44px}input{width:90px;font-size
 button:disabled{opacity:.4;cursor:not-allowed}
 .trades{margin-top:6px;padding:6px 8px;border-radius:8px;background:#0000000d;font-size:14px;line-height:1.4}
 .st.lo{box-shadow:0 0 0 3px #e0574b}
-#rules{position:fixed;inset:0;z-index:9;background:var(--bg);overflow:auto;padding:12px max(12px,calc(50% - 270px));padding-top:max(12px,env(safe-area-inset-top))}#rules h3{margin:14px 0 4px}#rules li{margin:4px 0;line-height:1.35}#rules ul{padding-left:20px;margin:4px 0}
+#rules,#log{position:fixed;inset:0;z-index:9;background:var(--bg);overflow:auto;padding:12px max(12px,calc(50% - 270px));padding-top:max(12px,env(safe-area-inset-top))}#rules h3{margin:14px 0 4px}#rules li{margin:4px 0;line-height:1.35}#rules ul{padding-left:20px;margin:4px 0}
+#log .lg{border:1px solid var(--bd);border-radius:12px;padding:8px 10px;margin:10px 0;background:var(--pn)}#log h3{margin:0 0 2px;font-size:16px}#log .le{display:flex;gap:8px;padding:3px 0;border-top:1px solid var(--bd);font-size:14px;line-height:1.3}#log .lt{opacity:.6;font-size:12px;min-width:62px;padding-top:1px;font-variant-numeric:tabular-nums}#log .up{color:#1a8a3a;font-weight:700}#log .dn{color:#c0262d;font-weight:700}
 .lnk{background:none;border:0;padding:4px;min-height:0;opacity:.6;font-weight:400;text-decoration:underline}
 .row{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:6px}.g{background:#0b6b3a;color:#fff;border-color:#0b6b3a}.r{background:#b3261e;color:#fff;border-color:#b3261e}
 .full>*{flex:1 1 0}
@@ -51,12 +52,12 @@ button:disabled{opacity:.4;cursor:not-allowed}
 .clock{font-weight:700;color:var(--turnbd)}
 small,.m{opacity:.7}h4{margin:8px 0 2px}
 </style></head><body>
-<div class="top"><b id="gt" style="font-size:18px">🃏 Poker Night</b><span><button data-a="rules" aria-label="Rules">📖</button> <button id="sh" data-a="share">🔗 Share</button> <button id="th" data-a="th" aria-label="Light or dark">🌙</button> <button id="snd" data-a="snd" aria-label="Sound and vibration">🔊</button></span></div>
-<div id="conn" class="p" hidden>Connecting…</div><div id="note" class="p" hidden></div><div id="main"></div><div id="lobby"></div><div id="host"></div><div id="admin"></div><div id="rules" hidden></div>
+<div class="top"><b id="gt" style="font-size:18px">🃏 Poker Night</b><span><button data-a="rules" aria-label="Rules">📖</button> <button data-a="log" aria-label="Game log">📜</button> <button id="sh" data-a="share">🔗 Share</button> <button id="th" data-a="th" aria-label="Light or dark">🌙</button> <button id="snd" data-a="snd" aria-label="Sound and vibration">🔊</button></span></div>
+<div id="conn" class="p" hidden>Connecting…</div><div id="note" class="p" hidden></div><div id="main"></div><div id="lobby"></div><div id="host"></div><div id="admin"></div><div id="rules" hidden></div><div id="log" hidden></div>
 <script>
 'use strict';
 const $=s=>document.querySelector(s),SU='♠♥♦♣',RK='  23456789TJQKA';
-let ws,S=null,me='',token='',hostKey='',host=false,admin=false,renaming=false,showKey=false,arm='',dealStep=0,dbb=0,dan=0,bta=0,rtMin=0,rtMax=0,rtStep=10,picking=false,lastPend=0,lastDeal=0,off=0,rt=0,peekT=0,snd='all',theme='',AC,lastN=-1,lastTurn='',curHid=0,doneFired=1,dsel=[],dselKey='',dwl=-2,wildR=[],addAmt={},adjFor='',noteT,retry=0,namesOpen=false,editName='';
+let ws,S=null,me='',token='',hostKey='',host=false,admin=false,renaming=false,showKey=false,arm='',dealStep=0,dbb=0,dan=0,bta=0,rtMin=0,rtMax=0,rtStep=10,picking=false,lastPend=0,lastDeal=0,off=0,rt=0,peekT=0,snd='all',theme='',AC,lastN=-1,lastTurn='',curHid=0,doneFired=1,dsel=[],dselKey='',dwl=-2,wildR=[],addAmt={},adjFor='',noteT,retry=0,logOpen=false,logData=null,logSeen=-1,logAsk=0,namesOpen=false,editName='';
 try{token=localStorage.getItem('pn_token')||'';hostKey=localStorage.getItem('pn_host')||'';snd=localStorage.getItem('pn_snd')||'all';theme=localStorage.getItem('pn_theme')||''}catch(e){}
 // the admin link is /#host=KEY: remember the key on this device, then drop it from the address bar
 {const m=location.hash.match(/host=([^&]+)/);if(m){try{hostKey=decodeURIComponent(m[1])}catch(e){hostKey=m[1]}try{localStorage.setItem('pn_host',hostKey)}catch(e){}history.replaceState(null,'',location.pathname)}}
@@ -86,7 +87,8 @@ function connect(){
  ws=new WebSocket((location.protocol=='https:'?'wss://':'ws://')+location.host+'/ws');
  ws.onopen=()=>{retry=0;$('#conn').hidden=true;ws.send(JSON.stringify({t:'hello',token,hostKey}))};
  ws.onmessage=e=>{const m=JSON.parse(e.data);
-  if(m.t=='state'){S=m.s;off=Date.now()-m.now;if(me!==m.you.name)renaming=false;me=m.you.name;host=m.you.host;admin=m.you.admin;render()}
+  if(m.t=='state'){S=m.s;off=Date.now()-m.now;if(me!==m.you.name)renaming=false;me=m.you.name;host=m.you.host;admin=m.you.admin;render();logRefresh()}
+  else if(m.t=='log'){logData=m.log;renderLog()}
   // the table was reset: start this device over from scratch (an admin password stays remembered)
   else if(m.t=='reset'){try{localStorage.removeItem('pn_token')}catch(x){}location.reload()}
   else if(m.t=='token'){token=m.token;try{localStorage.setItem('pn_token',token)}catch(x){}}
@@ -264,6 +266,8 @@ document.addEventListener('click',async e=>{const b=e.target.closest('[data-a]')
  else if(a=='rules'){showRules(S&&S.game);return}
  else if(a=='rulesgame'){showRules(v);return}
  else if(a=='closerules'){$('#rules').hidden=true;return}
+ else if(a=='log'){logOpen=true;logSeen=-1;$('#log').hidden=false;document.body.style.overflow='hidden';renderLog();logRefresh();return}
+ else if(a=='closelog'){logOpen=false;$('#log').hidden=true;document.body.style.overflow='';return}
  else if(a=='pickgame'){picking=true;render()}
  else if(a=='unpick'){picking=false;render()}
  else if(a=='setgame'){send({t:'game',game:v});picking=false;dealStep=1;render()}
@@ -314,6 +318,16 @@ document.addEventListener('focusout',e=>{const t=e.target;if(t.id=='dbb'){setBB(
 document.addEventListener('keydown',e=>{if(e.key!='Enter')return;if(e.target.id=='nm')$('[data-a=name]').click();if(e.target.id=='ak')$('[data-a=unlock]').click();if(e.target.id=='nadd')$('[data-a=nameadd]').click();if(e.target.id=='nren')$('[data-a=renok]').click()});
 document.addEventListener('change',e=>{if(e.target.id=='dwl')dwl=+e.target.value});
 document.addEventListener('input',e=>{const t=e.target;if(t.id=='rt'){if(+t.value>rtMax)t.value=rtMax;rt=+t.value}if(t.id=='dbb'){const l=$('#sbl');if(l)l.textContent='Small blind '+snap(t.value)/2}if(t.dataset.add)addAmt[t.dataset.add]=t.value});
+// ---------- game log: the last 5 games, only what everyone could see (the server builds it that way) ----------
+// fetched when the window opens, and again whenever the table adds to it (at most once a second)
+function logRefresh(){if(!logOpen||!S||S.logV===logSeen)return;const t=Date.now();if(t-logAsk<1000){setTimeout(logRefresh,1000-(t-logAsk));return}logAsk=t;logSeen=S.logV;send({t:'log'})}
+function renderLog(){const e=$('#log');if(!logOpen)return;
+ const tm=t=>new Date(t+off).toLocaleTimeString([],{hour:'numeric',minute:'2-digit',second:'2-digit'});
+ const ev=x=>`<div class="le"><span class="lt">${tm(x.t)}</span><span>${esc(x.m)}${x.c?' '+x.c.map(cn).join(' '):''}</span></div>`;
+ const games=(logData||[]).slice().reverse().map(R=>R.pre?`<div class="lg"><h3>Since the last game</h3>${R.ev.map(ev).join('')}</div>`:
+  `<div class="lg"><h3>Game ${R.id} · ${esc(R.name)}</h3><small>${tm(R.at)} · dealt by ${esc(R.dealer)} · ${esc(R.stakes)}</small><div><small>Playing: ${R.who.map(n=>`${esc(n)}${R.start[n]!=null?` (${R.start[n]})`:''}`).join(', ')}</small></div>${R.ev.map(ev).join('')}
+  <div class="le"><span class="lt"></span><span>${R.cancelled?'<b>Cancelled</b>: chips went back':!R.end?'<b>In progress…</b>':Object.keys(R.net||{}).length?'<b>Result:</b> '+Object.entries(R.net).sort((a,b)=>b[1]-a[1]).map(([n,v])=>`${esc(n)} <span class="${v>0?'up':v<0?'dn':''}">${v>0?'+':''}${v}</span>`).join(' · '):'<b>Game over</b>'}</span></div></div>`).join('');
+ put(e,`<div class="row" style="margin:0"><b style="flex:1;font-size:18px">📜 Game log</b><button data-a="closelog">Close</button></div><small>The last 5 games, newest first. Only what everyone at the table could see. Starting chips in brackets.</small>${logData?games||'<p>No games yet.</p>':'<p>Loading…</p>'}`)}
 // ---------- rules & tips ----------
 const RULES={
  holdem:{name:"Texas Hold'em",how:[

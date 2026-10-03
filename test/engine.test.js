@@ -964,7 +964,7 @@ test('7 Card No Peek: only the new leader can start betting; No Bet goes straigh
       assert.equal(H.cur, 0); assert.equal(H.best, i, 'the betting round opens with the leader');
       if (g % 2) {
         t.player(n, {t: 'act', a: 'call'}); nob++;                                  // No Bet
-        if (!H.done) { assert.equal(H.stage, 'flip', 'No Bet: nobody else bets, flipping goes on'); assert.notEqual(H.turn, i); assert.match(H.msg, /no bet/) }
+        if (!H.done) { assert.equal(H.stage, 'flip', 'No Bet: nobody else bets, flipping goes on'); assert.notEqual(H.turn, i); assert.match(H.msg, /No Bet/) }
       } else {
         t.player(n, {t: 'act', a: 'raise', amt: 100}); bets++;
         assert.equal(H.cur, 100); assert.notEqual(H.turn, i, 'after a bet the others call, raise or fold');
@@ -974,4 +974,51 @@ test('7 Card No Peek: only the new leader can start betting; No Bet goes straigh
     }
   }
   assert.ok(nob > 20 && bets > 20, nob + ' no-bets, ' + bets + ' bets');
+});
+
+test('game log: the last 5 games, only what everyone could see', () => {
+  let T = 1e6; const t = createTable(null, {now: () => T});
+  for (const n of ['A', 'B', 'C']) { t.player(n, {t: 'sit'}); t.host({op: 'seat', name: n}) }
+  const s = t.state(), deal = () => { T += 20000; t.tick(); t.player(s.seats[s.dealer], {t: 'deal', bb: 20}) };
+  // a hand won by everyone else folding: nobody's hole cards may appear
+  deal(); let H = s.hand, held = Object.values(H.h).flat();
+  t.player(s.seats[H.turn], {t: 'act', a: 'fold'}); t.player(s.seats[H.turn], {t: 'act', a: 'fold'});
+  assert.ok(H.done);
+  let R = t.log()[0];
+  assert.equal(R.name, "Texas Hold'em"); assert.equal(R.stakes, 'Blinds 10/20'); assert.equal(R.who.length, 3);
+  assert.ok(R.ev.some(e => /sits down/.test(e.m)), 'seating before the game is in its record');
+  assert.ok(R.ev.some(e => /posts the small blind \(10\)/.test(e.m)) && R.ev.some(e => /posts the big blind \(20\)/.test(e.m)));
+  assert.equal(R.ev.filter(e => / folds$/.test(e.m)).length, 2, 'both folds logged');
+  assert.ok(R.ev.some(e => / wins 30/.test(e.m)));
+  assert.ok(!R.ev.some(e => e.c && e.c.some(c => held.includes(c))), 'no hole cards when nobody shows');
+  assert.equal(Object.values(R.net).reduce((a, b) => a + b, 0), 0); assert.ok(R.end);
+  // a showdown: the hands shown are logged, as is the board
+  deal(); H = s.hand;
+  for (let k = 0; k < 30 && !H.done; k++) t.player(s.seats[H.turn], {t: 'act', a: 'call'});
+  R = t.log()[1];
+  assert.deepEqual(R.ev.filter(e => /^(Flop|Turn|River)$/.test(e.m)).map(e => e.c.length), [3, 1, 1]);
+  assert.equal(R.ev.filter(e => / shows$/.test(e.m)).length, 3);
+  // Screw Your Neighbor: a card only appears once it's face up (a shown Ace, or the reveal)
+  T += 20000; t.tick(); t.player(s.seats[s.dealer], {t: 'game', game: 'syn'}); t.player(s.seats[s.dealer], {t: 'deal', ante: 100});
+  for (const x of (s.optin || {who: []}).who) t.player(x, {t: 'optin', in: true});
+  H = s.hand; assert.equal(H.g, 'syn');
+  for (let k = 0; k < 500 && !H.done; k++) {
+    if (H.stage == 'play') {
+      const before = JSON.stringify(t.log().at(-1).ev.filter(e => e.c));
+      t.player(s.seats[H.turn], {t: 'act', a: k % 2 ? 'swap' : 'keep'});
+      if (H.stage == 'play') assert.equal(JSON.stringify(t.log().at(-1).ev.filter(e => e.c && !e.c.every(c => c % 13 == 12))), JSON.stringify(JSON.parse(before).filter(e => !e.c.every(c => c % 13 == 12))), 'no cards logged mid-round');
+    } else { T += 10000; t.tick() }
+  }
+  R = t.log().at(-1);
+  assert.ok(R.ev.some(e => /chose Screw Your Neighbor/.test(e.m)) && R.ev.some(e => / is in$/.test(e.m)), 'the game choice and who is in');
+  assert.ok(R.ev.some(e => / loses a life| each lose a life/.test(e.m)));
+  // only the last 5 games are kept
+  T += 20000; t.tick(); t.player(s.seats[s.dealer], {t: 'game', game: 'holdem'});
+  for (let g = 0; g < 6; g++) {
+    deal(); for (const x of (s.optin || {who: []}).who) t.player(x, {t: 'optin', in: true});
+    H = s.hand; for (let k = 0; k < 30 && !H.done; k++) t.player(s.seats[H.turn], {t: 'act', a: 'fold'});
+  }
+  const L = t.log().filter(r => !r.pre);
+  assert.equal(L.length, 5); assert.ok(L.every(r => r.end));
+  assert.ok(t.view('').logV > 0, 'everyone is told when the log changes');
 });

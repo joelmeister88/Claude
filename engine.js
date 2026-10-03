@@ -101,8 +101,61 @@ function createTable(saved, {now = Date.now, random = Math.random, shuffle = cry
   seedNames();
   let botAt = 0, botDealAt = 0;
 
+  // ---------- the game log: the last 5 games, built only from what everyone at the table can see ----------
+  // Each game is a record with a header (game, dealer, stakes, players, starting chips) and a list of events
+  // ({t, m, c?: cards}). Events come from the public view of the table (view('')), so nothing private (hole
+  // cards, Screw Your Neighbor swaps, unflipped No Peek cards) can get in. Things that happen between games
+  // (game chosen, who's in, seats, chips from the host) wait in S.logPre and open the next game's record.
+  const LOGN = 5;
+  function logNote(m) {
+    S.logV = (S.logV || 0) + 1;
+    const R = S.log && S.log[S.log.length - 1];
+    if (live() && R && R.id == S.hand.id && !R.end) R.ev.push({t: now(), m});
+    else { S.logPre = S.logPre || []; S.logPre.push({t: now(), m}); if (S.logPre.length > 40) S.logPre.shift() }
+  }
+  function logUpkeep() {
+    const H = S.hand; if (!H || !H.id) return;
+    S.log = S.log || [];
+    let R = S.log[S.log.length - 1];
+    if (!R || R.id != H.id) {
+      if (H.done && H.id <= (S.logDone || 0)) return; // an old finished hand (e.g. after a restart): nothing new
+      const g = H.g || 'holdem', sn = S.snap && S.snap.chips || {}, who = H.ps.map(i => S.seats[i]);
+      R = {id: H.id, g, name: GAMES[g].name, at: now(), dealer: S.seats[H.btn] || '', who,
+        stakes: g == 'holdem' ? 'Blinds ' + S.sb + '/' + S.bb : 'Ante ' + (H.ante || S.ante) + (g == 'draw' ? (H.wild >= 0 ? ' · ' + ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'Jack', 'Queen', 'King', 'Ace'][H.wild] + 's wild' : ' · no wild cards') : ''),
+        start: Object.fromEntries(who.filter(n => n in sn).map(n => [n, sn[n]])), ev: (S.logPre || []).splice(0), k: {}};
+      if (g == 'holdem') { const sb = H.ps[H.ps.length == 2 ? 1 : 0], bb = H.ps[H.ps.length == 2 ? 0 : 1]; for (const i of [sb, bb]) R.ev.push({t: now(), m: S.seats[i] + ' posts the ' + (i == sb ? 'small' : 'big') + ' blind (' + H.tot[i] + ')'}) }
+      if (g == 'nopeek') R.ev.push({t: now(), m: 'The dealer turns up the card to beat', c: [H.top]});
+      S.log.push(R); while (S.log.length > LOGN) S.log.shift();
+    }
+    if (R.end) return;
+    const V = view('').hand, k = R.k, n0 = R.ev.length, add = (m, c) => R.ev.push(c ? {t: now(), m, c} : {t: now(), m});
+    const msg = () => { if (V.msg && V.msg != k.m) { if (V.msg != 'New hand') add(V.msg); k.m = V.msg } };
+    // Between the Sheets: the middle card comes before the win or loss it caused
+    const bc = V.g == 'bts' && V.cards || {}, bkey = V.turn + ':' + bc.lo + ':' + bc.hi;
+    if (bc.mid != null && k.bm != bkey) { add('The card in the middle', [bc.mid]); k.bm = bkey }
+    if (!V.done) msg(); // at the end the cards come first, then who won
+    if (V.board && V.board.length > (k.b || 0)) { add(['Flop', 'Turn', 'River'][V.board.length == 3 ? 0 : V.board.length == 4 ? 1 : 2], V.board.slice(k.b || 0)); k.b = V.board.length }
+    if (V.g == 'bts') {
+      if (bc.lo != null && k.bt != bkey) { add(S.seats[V.turn] + "'s two cards", [bc.lo, bc.hi]); k.bt = bkey }
+    } else if (V.g == 'syn') {
+      for (const i in V.cards) { const c = V.cards[i], key = 'r' + V.round + ':' + i; if (c != null && k[key] !== c) { k[key] = c; add(S.seats[i] + "'s card", [c]) } }
+    } else if (V.h) {
+      for (const i in V.h) {
+        const seen = k['s' + i] = k['s' + i] || [], nw = (V.h[i] || []).filter(c => c != null && !seen.includes(c));
+        if (nw.length) { seen.push(...nw); add(S.seats[i] + (V.g == 'nopeek' && !V.done ? ' turns up' : ' shows'), nw) }
+      }
+    }
+    if (V.done) {
+      msg(); R.end = now(); S.logDone = H.id;
+      R.net = Object.fromEntries(Object.keys(R.start).map(n => [n, S.players[n] ? S.players[n].chips - R.start[n] : 0]));
+      if (V.g == 'syn' && S.carry) R.net = {}; // the pot carried over to the next game: nobody's result is final yet
+    }
+    if (R.ev.length != n0) S.logV = (S.logV || 0) + 1;
+  }
+  /** The last 5 games, for the log window. */
+  const log = () => (S.log || []).map(({k, ...R}) => R).concat(S.logPre && S.logPre.length ? [{pre: 1, ev: S.logPre}] : []);
   function changed() {
-    S.n++; if (S.hand && !S.hand.id) S.hand.id = S.hid = (S.hid || 0) + 1; tidy(); queueUpkeep(); dealerUpkeep(); freezeUpkeep();
+    S.n++; if (S.hand && !S.hand.id) S.hand.id = S.hid = (S.hid || 0) + 1; tidy(); queueUpkeep(); dealerUpkeep(); freezeUpkeep(); logUpkeep();
     const H = S.hand, p = H && !H.done && S.players[S.seats[H.turn]];
     botAt = p && p.bot ? now() + BOT_DELAY : 0;
     // each new decision gets a fresh 30s turn clock (bots move on their own timer)
@@ -137,6 +190,8 @@ function createTable(saved, {now = Date.now, random = Math.random, shuffle = cry
     S.carry = sn.carry; S.btn = sn.btn; S.dealer = sn.dealer; S.dealDl = 0; S.again = null; S.snap = null;
     const was = !H.done; H.done = 1; H.cancelled = 1; H.show = 0; H.turn = -1;
     H.msg = (was ? 'The host cancelled the game' : 'The host undid the last game') + ': everyone has the chips they had before it';
+    const R = (S.log || []).find(r => r.id == H.id);
+    if (R) { R.ev.push({t: now(), m: H.msg}); R.end = R.end || now(); R.cancelled = 1; R.net = {}; S.logV = (S.logV || 0) + 1 }
     Object.keys(S.leave).forEach(stand); S.wait = now();
   }
 
@@ -224,8 +279,9 @@ function createTable(saved, {now = Date.now, random = Math.random, shuffle = cry
     S.seats.forEach(n => { if (n && S.players[n].chips <= 0) { if (S.players[n].bot) stand(n); else if (!S.buy[n]) S.bust[n] = t + BUST } });
     S.dealer = keepDealer && eligible(S.hand.btn) ? S.hand.btn : nextEligible(S.hand.btn); S.dealDl = 0; // the button moves one to the left
   }
-  function finish(lv) { const H = S.hand, n = S.seats[lv[0]], pot = Object.values(H.tot).reduce((a, b) => a + b, 0); S.players[n].chips += pot; H.msg = n + ' wins ' + pot; endHand() }
+  function finish(lv) { logUpkeep(); const H = S.hand, n = S.seats[lv[0]], pot = Object.values(H.tot).reduce((a, b) => a + b, 0); S.players[n].chips += pot; H.msg = n + ' wins ' + pot; endHand() }
   function showdown(lv) {
+    logUpkeep();
     const H = S.hand, sc = {}; lv.forEach(i => sc[i] = H.g == 'draw' ? bestW(H.h[i], H.wild) : H.g == 'nopeek' ? H.sc[i] : best(H.h[i].concat(H.board)));
     const levels = [...new Set(lv.map(i => H.tot[i]).concat(Math.max(...H.ps.map(i => H.tot[i]))))].sort((a, b) => a - b), win = {}; let pv = 0;
     levels.forEach(L => {
@@ -248,6 +304,7 @@ function createTable(saved, {now = Date.now, random = Math.random, shuffle = cry
     H.stage = 1; H.ps.forEach(i => H.bet[i] = 0); H.cur = 0; H.acted = {}; H.drew = {}; H.msg = 'Draw: swap up to 5 cards'; drawNext();
   }
   function drawNext() {
+    logUpkeep();
     const H = S.hand, i = H.ps.find(j => !H.fold[j] && !(j in H.drew)); if (i !== undefined) { H.turn = i; return }
     const lv = H.ps.filter(j => !H.fold[j]), can = lv.filter(j => !H.allin[j]);
     H.stage = 2; H.cur = 0; H.minR = S.ante; H.acted = {}; H.msg = 'Second betting round';
@@ -277,6 +334,7 @@ function createTable(saved, {now = Date.now, random = Math.random, shuffle = cry
   }
   const npWho = () => { const H = S.hand; return H.best >= 0 ? S.seats[H.best] + "'s " + H.cat[H.best] : "the dealer's card" };
   function npNextFlipper(from) {
+    logUpkeep();
     const H = S.hand;
     for (;;) {
       const lv = npLive(); if (lv.length == 1) return finish(lv);
@@ -286,7 +344,7 @@ function createTable(saved, {now = Date.now, random = Math.random, shuffle = cry
         if (H.up[j] < 7) c = j;
         else if (H.sc[j] < H.bestSc) out = j; // all seven showing and still behind: out. (Tied with the best: stays in, can't flip more.)
       }
-      if (out >= 0) { H.fold[out] = 1; H.msg = S.seats[out] + ' is out: all seven cards showing and no better hand'; from = out; npLeader(); continue }
+      if (out >= 0) { H.fold[out] = 1; H.msg = S.seats[out] + ' is out: all seven cards showing and no better hand'; logUpkeep(); from = out; npLeader(); continue }
       if (c < 0) { H.msg = ''; return showdown(lv) } // everyone left is tied with all seven showing: split the pot
       H.turn = c; H.stage = 'flip'; H.nact = (H.nact || 0) + 1; H.msg = S.seats[c] + ' to flip: beat ' + npWho(); return;
     }
@@ -306,6 +364,7 @@ function createTable(saved, {now = Date.now, random = Math.random, shuffle = cry
     if (H.up[i] >= 7) return;
     const open = npOpen(i), k = Number.isInteger(idx) && idx >= 0 && idx < 7 && !open[idx] ? idx : open.indexOf(0);
     open[k] = 1; H.up[i]++; H.nact = (H.nact || 0) + 1; H.last = i;
+    logUpkeep();
     const sc = H.sc[i] = scoreAny(H.h[i].filter((c, j) => open[j]), DRPEPPER); H.cat[i] = category(sc);
     if (sc > H.bestSc) { H.best = i; H.bestSc = sc; H.msg = n + ' beats the table with ' + H.cat[i]; return npBet(i) }
     H.msg = n + ' flips: ' + H.cat[i] + ', not enough yet';
@@ -324,7 +383,7 @@ function createTable(saved, {now = Date.now, random = Math.random, shuffle = cry
     npLeader();
     if (H.stage == 'flip') return npNextFlipper(H.turn);
     // the leader chose No Bet (checked, or ran out of time): nobody else may bet, the next player flips
-    if (H.cur == 0) { const who = S.seats[H.last]; npNextFlipper(H.last); if (H.stage == 'flip') H.msg = who + ': no bet · ' + H.msg; return }
+    if (H.cur == 0) { const who = S.seats[H.last]; npNextFlipper(H.last); if (H.stage == 'flip') H.msg = who + ' chose No Bet · ' + H.msg; return }
     const can = lv.filter(i => !H.allin[i]);
     if (!can.every(i => H.acted[i] && H.bet[i] == H.cur)) { H.turn = nxt(H.turn); return }
     npNextFlipper(H.last);
@@ -348,7 +407,7 @@ function createTable(saved, {now = Date.now, random = Math.random, shuffle = cry
     if (a == 'fold') { H.fold[t] = 1; if (H.disc) H.disc.push(...H.h[t]); H.msg = n + ' folds' }
     else {
       let to = a == 'raise' ? int(amt) || 0 : 0; const mx = b + p.chips; to = Math.min(to, mx);
-      if (a != 'raise' || to <= H.cur) { post(t, need); H.msg = n + (need > 0 ? ' calls ' + Math.min(need, b + p.chips) : ' checks') }
+      if (a != 'raise' || to <= H.cur) { post(t, need); H.msg = n + (need > 0 ? ' calls ' + Math.min(need, b + p.chips) : np() && !H.cur ? ': no bet' : ' checks') }
       else {
         // bets go up in steps of the big blind (Hold'em) or of 100 (5 Card Draw, No Peek); all-in can be any amount
         const step = draw() || np() ? 100 : S.bb, least = Math.ceil((H.cur + step) / step) * step;
@@ -356,7 +415,7 @@ function createTable(saved, {now = Date.now, random = Math.random, shuffle = cry
         H.cur = to; H.acted = {}; post(t, to - b); H.msg = n + (H.allin[t] ? ' is all-in ' : ' raises to ') + to;
       }
     }
-    H.acted[t] = 1; H.nact = (H.nact || 0) + 1; adv(); autoFold();
+    H.acted[t] = 1; H.nact = (H.nact || 0) + 1; logUpkeep(); adv(); autoFold();
   }
   function autoFold() { const H = S.hand; if (live() && holdem() && S.leave[S.seats[H.turn]]) act(S.seats[H.turn], 'fold') }
 
@@ -435,6 +494,7 @@ function createTable(saved, {now = Date.now, random = Math.random, shuffle = cry
     synRound();
   }
   function synRound() {
+    logUpkeep();
     const H = S.hand, al = alive();
     // not enough cards left to deal everyone (plus one for a swap with the deck): fresh shuffled deck
     const re = H.d.length < al.length + 1; if (re) H.d = shuffle();
@@ -472,6 +532,7 @@ function createTable(saved, {now = Date.now, random = Math.random, shuffle = cry
     if (k < al.length - 1) H.turn = al[k + 1]; else synReveal();
   }
   function synReveal() {
+    logUpkeep();
     const H = S.hand, al = alive(), lo = Math.min(...al.map(i => rank(H.cards[i]))), losers = al.filter(i => rank(H.cards[i]) == lo);
     H.stage = 'reveal'; H.turn = -1; H.low = losers;
     losers.forEach(i => H.lives[i]--); H.msg = losers.map(i => S.seats[i]).join(', ') + (losers.length > 1 ? ' each lose' : ' loses') + ' a life';
@@ -528,7 +589,7 @@ function createTable(saved, {now = Date.now, random = Math.random, shuffle = cry
       if (openSeats() > 0) S.pend[n] = 1; else S.queue.push(n);
     }
     else if (m.t == 'unsit') { delete S.pend[n]; S.queue = S.queue.filter(x => x != n) }
-    else if (m.t == 'stand') { if (!seated) return; standOrLeave(n) }
+    else if (m.t == 'stand') { if (!seated) return; logNote(n + ' stands up'); standOrLeave(n) }
     else if (m.t == 'buy') { if (!seated) return; delete S.bust[n]; S.buy[n] = 1 }
     else if (m.t == 'deal') {
       if (S.seats[S.dealer] !== n) return "You're not the dealer";
@@ -542,11 +603,11 @@ function createTable(saved, {now = Date.now, random = Math.random, shuffle = cry
         S.sitout = {};
         const need = S.game == 'holdem' ? 1 : S.ante;
         const who = S.seats.filter(x => x && x != n && !S.players[x].bot && S.players[x].chips >= need && !S.leave[x]);
-        if (who.length) { S.optin = {game: S.game, dealer: n, until: now() + OPTIN, who, ans: {}}; S.dealDl = 0; return changed() }
+        if (who.length) { logNote(n + ' is dealing ' + GAMES[S.game].name + ': everyone has 20 seconds to say if they\'re in'); S.optin = {game: S.game, dealer: n, until: now() + OPTIN, who, ans: {}}; S.dealDl = 0; return changed() }
       }
       const e = startHand(); if (e) { [S.sb, S.bb, S.ante, S.wild] = keep; return e }
     }
-    else if (m.t == 'optin') { const O = S.optin; if (!O || !O.who.includes(n)) return; O.ans[n] = m.in ? 'in' : 'out'; if (O.who.every(x => O.ans[x])) optResolve() }
+    else if (m.t == 'optin') { const O = S.optin; if (!O || !O.who.includes(n)) return; O.ans[n] = m.in ? 'in' : 'out'; logNote(n + (m.in ? ' is in' : ' sits this one out')); if (O.who.every(x => O.ans[x])) optResolve() }
     else if (m.t == 'dealmein') { if (!S.sitout[n]) return; delete S.sitout[n] }
     else if (m.t == 'again') { if (!S.again) return; againAnswer(n, !!m.yes) }
     else if (m.t == 'game') {
@@ -554,6 +615,7 @@ function createTable(saved, {now = Date.now, random = Math.random, shuffle = cry
       if (S.optin) return 'Players are choosing whether they are in';
       const g = GAMES[m.game]; if (!g || !g.ready) return "That game isn't available yet";
       if (g.max && S.seats.filter((n, i) => eligible(i)).length > g.max) return g.name + ' is for up to ' + g.max + ' players, and more are seated';
+      if (S.game != m.game) logNote(n + ' chose ' + g.name);
       S.game = m.game;
     }
     else if (m.t == 'act') {
@@ -586,22 +648,22 @@ function createTable(saved, {now = Date.now, random = Math.random, shuffle = cry
       case 'bot': {
         const s = freeSeat(); if (s < 0) return 'Table is full';
         let k = 1; while (S.players['Bot ' + k]) k++;
-        S.players['Bot ' + k] = {chips: 1000, bot: 1}; S.seats[s] = 'Bot ' + k; S.last = s; break;
+        S.players['Bot ' + k] = {chips: 1000, bot: 1}; S.seats[s] = 'Bot ' + k; S.last = s; logNote('Bot ' + k + ' sits down with 1000 chips'); break;
       }
       case 'rmbot': { if (!p.bot) return 'Not a bot'; if (live()) return 'Wait until this hand ends'; stand(n); delete S.players[n]; break }
       case 'seat': {
         if (!S.pend[n]) return; const add = m.add == null || m.add === '' ? (p.chips > 0 ? 0 : 1000) : int(m.add), s = freeSeat();
         if (!(add >= 0)) return 'Enter a chip amount'; if (s < 0) return 'Table is full'; if (p.chips + add <= 0) return 'Give them some chips first';
-        p.chips += add; hostChips(n, add); S.seats[s] = n; S.last = s; delete S.pend[n]; break;
+        p.chips += add; hostChips(n, add); S.seats[s] = n; S.last = s; delete S.pend[n]; logNote(n + ' sits down' + (add ? ' (the host gives ' + add + ' chips)' : '')); break;
       }
       case 'noseat': delete S.pend[n]; break;
-      case 'give': { const add = int(m.add); if (!(add > 0)) return 'Enter a chip amount'; p.chips += add; hostChips(n, add); delete S.buy[n]; break }
+      case 'give': { const add = int(m.add); if (!(add > 0)) return 'Enter a chip amount'; p.chips += add; hostChips(n, add); delete S.buy[n]; logNote('The host gives ' + n + ' ' + add + ' chips'); break }
       case 'nobuy': delete S.buy[n]; if (p.chips <= 0 && !inLiveHand(n) && S.seats.includes(n)) stand(n); break;
-      case 'adj': { const x = int(m.x); if (!x) return; if (inLiveHand(n)) return 'Wait until this hand ends'; const was = p.chips; p.chips = x < 0 ? Math.max(p.chips + x, Math.min(p.chips, 0)) : p.chips + x; hostChips(n, p.chips - was); break }
+      case 'adj': { const x = int(m.x); if (!x) return; if (inLiveHand(n)) return 'Wait until this hand ends'; const was = p.chips; p.chips = x < 0 ? Math.max(p.chips + x, Math.min(p.chips, 0)) : p.chips + x; hostChips(n, p.chips - was); if (p.chips != was) logNote('The host changes ' + n + "'s chips by " + (p.chips > was ? '+' : '') + (p.chips - was)); break }
       case 'cancel': { const e = cancelGame(); if (e) return e; break }
-      case 'kick': standOrLeave(n); break;
+      case 'kick': logNote('The host stands ' + n + ' up'); standOrLeave(n); break;
       case 'blinds': { const bb = int(m.bb), e = blindError(bb); if (e) return e; S.sb = bb / 2; S.bb = bb; break }
-      case 'pause': S.paused = m.on ? 1 : 0; break;
+      case 'pause': S.paused = m.on ? 1 : 0; logNote(m.on ? 'The host pauses the game' : 'The host resumes the game'); break;
       default: return;
     }
     changed();
@@ -641,6 +703,7 @@ function createTable(saved, {now = Date.now, random = Math.random, shuffle = cry
     if (S.dealDl && t >= S.dealDl && canDeal()) {
       const from = S.seats[S.dealer]; S.dealer = nextEligible(S.dealer); S.dealDl = 0;
       if (S.hand) S.hand.msg = from + ' passed the deal to ' + S.seats[S.dealer];
+      logNote(from + " didn't deal in time: the deal passes to " + S.seats[S.dealer]);
       ch = 1;
     }
     // a bot dealer deals on its own, as long as a person is playing
@@ -730,9 +793,9 @@ function createTable(saved, {now = Date.now, random = Math.random, shuffle = cry
       btn: S.btn, dealer: S.dealer, dealDl: S.dealDl, sb: S.sb, bb: S.bb, ante: S.ante, game: S.game, wild: S.wild ?? -1, gameName: GAMES[S.game].name,
       games: Object.entries(GAMES).map(([id, g]) => ({id, name: g.name, blurb: g.blurb, ready: !!g.ready, max: g.max || 0})), seatedN: S.seats.filter((n, i) => eligible(i)).length, n: S.n,
       queue: S.queue, paused: S.frozenAt || 0, carry: S.carry || 0, again: S.again, optin: S.optin, sitout: S.sitout, hold: holdReason(),
-      canUndo: !!S.snap, known: Object.keys(S.known).sort((a, b) => S.known[b] - S.known[a])};
+      canUndo: !!S.snap, logV: S.logV || 0, known: Object.keys(S.known).sort((a, b) => S.known[b] - S.known[a])};
   }
-  return {state: () => S, view, player, host, tick, remember, forget, addName, renameName, reset, release};
+  return {state: () => S, log, view, player, host, tick, remember, forget, addName, renameName, reset, release};
 }
 
 module.exports = {createTable, best, bestW, scoreAny, s5, category, WAIT, BUST, TURN, SEATS};
