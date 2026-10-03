@@ -10,9 +10,10 @@ button{cursor:pointer;font-weight:600;min-height:44px}input{width:90px;font-size
 .p{background:var(--pn);border:1px solid var(--bd);border-radius:12px;padding:10px;margin-top:8px}
 .p.turn{background:var(--turn);border-color:var(--turnbd)}
 .top{display:flex;justify-content:space-between;align-items:center;gap:6px}
-.tbl{--cw:min(11vw,58px);position:relative;width:100%;aspect-ratio:4/5;max-height:62vh;margin:8px auto 0;background:radial-gradient(#1b8f50,#0a5430);border:7px solid #5b3a1e;border-radius:50%;color:#fff}
-.mid{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);white-space:nowrap}
-.info{position:absolute;left:50%;top:calc(50% + var(--cw)*.7 + 4px);transform:translateX(-50%);width:58%;text-align:center}
+/* the table is always a circle; --s (set per player count) sizes the seats as a share of its width */
+.tbl{--cw:min(11vw,58px);--s:18;container-type:inline-size;position:relative;width:min(100%,70vh);aspect-ratio:1/1;margin:8px auto 0;background:radial-gradient(#1b8f50,#0a5430);border:7px solid #5b3a1e;border-radius:50%;color:#fff}
+.mid{position:absolute;left:50%;top:calc(50% - var(--oy,0%));transform:translate(-50%,-50%);white-space:nowrap}
+.info{position:absolute;left:50%;top:calc(50% - var(--oy,0%) + var(--cw)*.7 + 4px);transform:translateX(-50%);width:max-content;max-width:40%;text-align:center}
 /* cards: rank over suit, both large; --w sets the size */
 .c{--w:34px;display:inline-flex;flex-direction:column;align-items:center;justify-content:center;vertical-align:middle;width:var(--w);height:calc(var(--w)*1.4);margin:1px;border-radius:calc(var(--w)*.13);background:#fff;color:#111;font:700 calc(var(--w)*.46)/1 system-ui;font-style:normal;box-shadow:0 1px 3px #0008}
 .c b{font-weight:800;letter-spacing:-.04em}.c span{font-size:1.05em;margin-top:.04em}
@@ -21,17 +22,17 @@ button{cursor:pointer;font-weight:600;min-height:44px}input{width:90px;font-size
 .c.xs{--w:11px;margin:0}.c.nk{--w:40px}.cb.go .c{animation:pl 1.2s ease-in-out infinite}@keyframes pl{50%{transform:translateY(-4px);box-shadow:0 0 0 3px #ffd54a}}.c.md{--w:56px}.c.rs{--w:28px}.c.sel{outline:3px solid #e0574b;transform:translateY(-8px)}
 .cb{padding:0;border:0;background:none;min-height:0;display:inline-block}select{font:inherit;font-size:16px;min-height:44px;border-radius:10px;border:1px solid var(--bd);padding:8px;background:var(--pn);color:var(--fg)}
 .c.e{background:#0003;box-shadow:none;border:1px dashed #fff6}
-.c.bd{--w:var(--cw)}.c.lg{--w:64px}.c.sm{--w:19px;margin:0}
-.st{position:absolute;transform:translate(-50%,-50%);width:66px;text-align:center;font-size:11px;background:#000b;border-radius:10px;padding:3px 2px;line-height:1.2;z-index:1}
+.c.bd{--w:var(--cw)}.c.lg{--w:64px}.c.sm{--w:19px;margin:0}.st .c.sm{--w:calc(var(--s)*.29cqw)}
+.st{position:absolute;transform:translate(-50%,-50%);width:66px;width:calc(var(--s)*1cqw);text-align:center;font-size:11px;font-size:calc(var(--s)*.17cqw);background:#000b;border-radius:10px;padding:3px 2px;line-height:1.2;z-index:1}
 .st b{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .st.f{opacity:.45}
 /* whose turn it is: a bigger, glowing seat with a tag above it */
 .st.t{z-index:3;transform:translate(-50%,-50%) scale(1.12);background:#1a1400;animation:turnglow 1.2s ease-in-out infinite}
 @keyframes turnglow{0%,100%{box-shadow:0 0 0 3px #ffd54a,0 0 6px 2px #ffd54a88}50%{box-shadow:0 0 0 4px #ffd54a,0 0 18px 7px #ffd54acc}}
 @media (prefers-reduced-motion:reduce){.st.t{animation:none;box-shadow:0 0 0 4px #ffd54a,0 0 12px 4px #ffd54aaa}}
-.tn{display:block;margin:-3px -2px 2px;background:#ffd54a;color:#1d1d1b;font-weight:800;font-size:10px;letter-spacing:.03em;border-radius:9px 9px 0 0;padding:1px 2px;white-space:nowrap}
+.tn{display:block;margin:-3px -2px 2px;background:#ffd54a;color:#1d1d1b;font-weight:800;font-size:min(.9em,calc(var(--s)*.12cqw));letter-spacing:.03em;border-radius:9px 9px 0 0;padding:1px 2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .tn span:empty{display:none}.st.me{outline:2px solid #6cf}
-.bet{font-size:11px;font-weight:700;color:#ffd54a;white-space:nowrap;line-height:14px;margin-top:2px}.bet .ch{width:10px;height:10px;border-width:2px}
+.bet{font-size:1em;font-weight:700;color:#ffd54a;white-space:nowrap;line-height:14px;margin-top:2px}.bet .ch{width:10px;height:10px;border-width:2px}
 .ch{display:inline-block;width:13px;height:13px;border-radius:50%;border:3px dashed #fff;background:#c0392b;vertical-align:middle;margin-right:2px}
 .d{display:inline-block;background:#ffd54a;color:#000;border:1.5px solid #fff;border-radius:50%;width:17px;height:17px;font-size:11px;line-height:14px;font-weight:800;text-align:center;margin-right:2px;box-shadow:0 0 4px #000}
 .names{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}.dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#2ecc71;margin-left:4px;vertical-align:middle}
@@ -116,6 +117,26 @@ function tick(){document.querySelectorAll('[data-cd]').forEach(e=>{const s=left(
  const d=$('[data-a=deal][data-until]');if(d){const s=left(+d.dataset.until);d.disabled=s>0;const t=s?'Deal in '+s+'s':'Deal';if(d.textContent!==t)d.textContent=t}}
 setInterval(tick,250);
 const owed=()=>S.seats.filter(n=>n&&S.players[n].chips<=0);
+// Seat size and board-card size (both as % of the table's width): seats as big as fit for this many players,
+// with the board cards shrinking a little (never below ~10%) before the seats have to. Nothing may touch:
+// seat against seat, seat against the board cards, seat against the pot text. More players never means
+// bigger seats.
+// ih: how tall the text under the board gets in this game (% of the table).
+const LAY={};
+function seatLayout(N,ih=14){
+ const tw=Math.max(200,Math.min(Math.min(innerWidth,560)-16,innerHeight*.7)),cw0=Math.min(innerWidth*.11,58)/tw*100,key=N+':'+Math.round(tw)+':'+ih;
+ if(LAY[key])return LAY[key];
+ const hit=(a,b)=>a[0]<b[1]&&b[0]<a[1]&&a[2]<b[3]&&b[2]<a[3];
+ const place=sz=>{const rx=48.5-sz/2,ry=48.5-sz*.6,h=sz*1.2,R=[];
+  for(let r=0;r<N;r++){const a=r*2*Math.PI/N,x=50-rx*Math.sin(a),y=50+ry*Math.cos(a);R.push([x-sz/2-.5,x+sz/2+.5,y-h/2,y+h/2])}return {rx,ry,R}};
+ // the biggest board cards (down to ~10%) that fit with seats of this size, and how far up (oy) the middle
+ // has to move for them, or 0 if nothing fits
+ const fit=sz=>{const {R}=place(sz);if(!R.every((q,i)=>R.every((p,j)=>j<=i||!hit(q,p))))return 0;
+  for(let cw=cw0;cw>=10.25;cw-=.25)for(let oy=0;oy<=ih-10;oy++){const c=50-oy,z=[[50-2.85*cw,50+2.85*cw,c-.72*cw,c+.72*cw],[29,71,c+.72*cw,c+.72*cw+ih]];if(R.every(q=>!z.some(b=>hit(q,b))))return {cw,oy}}return 0};
+ let top=Math.max(15,Math.min(27-N,200/N));if(N>2)top=Math.min(top,seatLayout(N-1,ih).sz);
+ let sz=top;while(sz>12&&!fit(sz))sz-=.5;
+ return LAY[key]={sz,...place(sz),...(fit(sz)||{cw:10.25,oy:0})};
+}
 function render(){const m=$('#main');
  if(!S){put(m,'<div class="p">Connecting to the table…</div>');return}
  $('#gt').textContent='🃏 '+S.gameName;
@@ -124,11 +145,12 @@ function render(){const m=$('#main');
   put($('#lobby'),'');renderHost();renderAdmin();return}
  const H=S.hand,isSyn=H&&H.g=='syn',isBts=H&&H.g=='bts',isDraw=H&&H.g=='draw',isNP=H&&H.g=='nopeek';wildR=isDraw&&H.wild>=0?[H.wild]:isNP?[0,2,8]:[];const my=S.seats.indexOf(me),inH=H&&!isSyn&&!isBts&&H.ps.includes(my)&&!H.fold[my],inG=isSyn&&H.ps.includes(my),inB=isBts&&H.ps.includes(my)&&!H.out[my],pl=S.players[me],pot=!H?0:isSyn||isBts?H.pot:Object.values(H.tot).reduce((a,b)=>a+b,0);
  const occ=S.seats.map((n,i)=>n?i:-1).filter(i=>i>=0),N=Math.max(occ.length,1),mr=Math.max(0,occ.indexOf(my));
- let seats='';for(let r=0;r<occ.length;r++){const i=occ[r],a=(r-mr)*2*Math.PI/N,x=50-41*Math.sin(a),y=50+42*Math.cos(a),n=S.seats[i];
+ const {sz,rx,ry,cw,oy}=seatLayout(N,S.game=='nopeek'?24:S.game=='syn'||S.game=='bts'?18:14);
+ let seats='';for(let r=0;r<occ.length;r++){const i=occ[r],a=(r-mr)*2*Math.PI/N,x=50-rx*Math.sin(a),y=50+ry*Math.cos(a),n=S.seats[i];
   const so=S.sitout&&S.sitout[n]&&!(H&&!H.done&&H.ps.includes(i)),ih=H&&H.ps.includes(i),fo=ih&&(isSyn?!(H.lives[i]>0):isBts?H.out[i]:H.fold[i]),lo=isSyn&&H.stage=='reveal'&&H.low.includes(i);
   const cards=!ih||isBts?'':isSyn?(i in H.cards?'<br>'+ch(i==my&&!H.shown[i]&&H.stage!='reveal'?null:H.cards[i],'sm'):'')+`<div class="lv">${coins(H.lives[i])}</div>`:!fo&&!isNP?'<br>'+H.h[i].map(c=>ch(H.show?c:null,isDraw?'xs':'sm')).join(''):'';
   const myT=H&&!H.done&&H.turn==i,dealT=!(H&&!H.done)&&S.dealDl>0&&S.dealer==i;
-  seats+=`<div class="st ${myT||dealT?'t':''} ${fo||so?'f':''} ${lo?'lo':''} ${i==my?'me':''}" style="left:${x}%;top:${y}%">${myT?`<div class="tn">${i==my?'YOUR TURN':'TURN'} <span data-cd="${H.dl||0}"></span></div>`:dealT?`<div class="tn">${i==my?'YOUR DEAL':'DEALING'} <span data-cd="${S.dealDl}"></span></div>`:''}<b>${(H&&!H.done?H.btn:S.dealer)==i?'<span class="d">D</span>':''}${n===S.hostName?'<span title="Host">👑</span>':''}${esc(n)}</b>${S.players[n].chips}${cards}${so?'<div class="bet" style="color:#ddd">sitting out</div>':''}${ih&&!isSyn&&!isBts&&H.bet[i]?`<div class="bet"><i class="ch"></i>${H.bet[i]}</div>`:''}</div>`}
+  seats+=`<div class="st ${myT||dealT?'t':''} ${fo||so?'f':''} ${lo?'lo':''} ${i==my?'me':''}" style="left:${x}%;top:${y}%">${myT?`<div class="tn">${i==my?'YOUR TURN':`TURN <span data-cd="${H.dl||0}"></span>`}</div>`:dealT?`<div class="tn">${i==my?'YOUR DEAL':'DEALING'} <span data-cd="${S.dealDl}"></span></div>`:''}<b>${(H&&!H.done?H.btn:S.dealer)==i?'<span class="d">D</span>':''}${n===S.hostName?'<span title="Host">👑</span>':''}${esc(n)}</b>${S.players[n].chips}${cards}${so?'<div class="bet" style="color:#ddd">sitting out</div>':''}${ih&&!isSyn&&!isBts&&H.bet[i]?`<div class="bet"><i class="ch"></i>${H.bet[i]}</div>`:''}</div>`}
  const res=isBts&&H.res,ring=res=='win'?'box-shadow:0 0 0 3px #2ecc71':res=='post'?'box-shadow:0 0 0 3px #e0574b':'';
  const board=isBts?(H.done&&!H.show?'':`${H.done?'':`<span class="deck"><i class="c b bd"></i><b>${H.deckN}</b></span> &nbsp;`}${ch(H.cards.lo,'bd')}${H.cards.mid!=null?ch(H.cards.mid,'bd').replace('<i ',`<i style="${ring}" `):'<i class="c e bd"></i>'}${ch(H.cards.hi,'bd')}`):isSyn?(H.done?'':`<span class="deck"><i class="c b bd"></i><b>${H.deckN}</b></span>`):isNP?ch(H.top,'bd'):isDraw?`<div style="font-size:14px;line-height:1.5">${H.wild>=0?'Wild: <b>'+WN(H.wild)+'s</b> ★':'No wild cards'}<br>${H.stage==0?'Betting':H.stage==1?'Drawing':'Final betting'}</div>`:H?[0,1,2,3,4].map(k=>H.board[k]!=null?ch(H.board[k],'bd'):'<i class="c e bd"></i>').join(''):'';
  const qi=(S.queue||[]).indexOf(me),full=S.seats.filter(n=>!n).length-Object.keys(S.pend).length<=0;
@@ -186,7 +208,7 @@ function render(){const m=$('#main');
  if(picking&&myDeal){put(m,`<div class="p turn"><div class="row"><b style="flex:1">Choose the game</b><span class="clock" data-cd="${S.dealDl}"></span></div><small>You're the dealer. Pick what everyone plays next.</small>${S.games.map(g=>`<button class="game ${g.id==S.game?'cur':''}" data-a="setgame" data-v="${g.id}" ${g.ready&&!(g.max&&S.seatedN>g.max)?'':'disabled'}><b>${esc(g.name)}</b>${g.id==S.game?' <small>· now playing</small>':''}${g.max&&S.seatedN>g.max?` <small>· up to ${g.max} players (${S.seatedN} seated)</small>`:''}<br><small>${esc(g.blurb)}</small></button>`).join('')}<div class="row"><button data-a="unpick">Back</button></div></div>`);lastN=S.n;renderLobby();renderHost();renderAdmin();tick();return}
  if(!myDeal){picking=false;dealStep=0}
  const f=document.activeElement;
- if(!(f&&['dbb','dan','bta','rt','dwl'].includes(f.id)&&m.contains(f)))put(m,`<div class="tbl" style="aspect-ratio:${N<=3?'1/1':N<=7?'6/7':'4/5'}">${seats}<div class="mid">${board}</div><div class="info">${isNP?`<div style="font-size:12px">Card to beat${[0,2,8].includes(H.top%13)?' (wild = Ace)':''} · Wild: <b>2s 4s 10s</b> ★</div>`:''}<div style="font-size:16px"><i class="ch"></i><b>Pot ${pot}</b></div>${isBts&&!H.done&&H.stage!='bet'?`<div style="font-size:12px">${H.stage=='skip'?`No bet: ${esc(H.why)} · `:''}next player in <span data-cd="${H.nextAt||0}"></span></div>`:''}${isSyn&&!H.done?`<div style="font-size:12px">Round ${H.round}${H.stage=='reveal'?` · next round in <span data-cd="${H.nextAt||0}"></span>`:''}</div>`:''}<div style="font-size:12px">${S.hold=='host'?'<b style="color:#ffd54a">⏸ Paused by the host</b><br>':S.hold=='seats'?`<b style="color:#ffd54a">⏸ Waiting for the host to seat ${esc(Object.keys(S.pend).join(', '))}</b><br>`:''}${H?esc(H.msg):''}${O?`<br>${esc(oName)} starts in <span data-cd="${O.until}"></span> · ${oIn} in${oIn<O.who.length?`, ${O.who.length-oIn} out`:''}`:S.again?`<br>Play again? ${Object.keys(S.again.yes).length} in so far <span data-cd="${S.again.until}"></span>`:!live&&S.dealDl&&dealer?`<br><span class="d">D</span>${esc(dealer)} deals next <span data-cd="${S.dealDl}"></span>`:!live&&!S.dealDl?'<br>Waiting for players':''}</div></div></div>${isNP?`<div class="p"><b>Cards flipped</b>${H.ps.map(i=>{const up=H.h[i].filter(c=>c!=null),dn=7-up.length;return`<div class="row" style="margin-top:3px;opacity:${H.fold[i]?.4:1}"><span style="width:84px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${H.best==i&&!H.fold[i]?'👑 ':''}${esc(S.seats[i])}</span><span>${up.map(c=>ch(c,'rs')).join('')}${'<i class="c b xs" style="margin:1px 2px"></i>'.repeat(dn)}</span>${H.cat[i]?`<small>${esc(H.cat[i])}${H.fold[i]?' · out':''}</small>`:H.fold[i]?'<small>out</small>':''}</div>`}).join('')}</div>`:''}${isDraw&&H.done&&H.show?`<div class="p"><b>Hands</b>${H.ps.filter(i=>!H.fold[i]).map(i=>`<div class="row" style="margin-top:2px"><span style="width:90px;overflow:hidden;text-overflow:ellipsis">${esc(S.seats[i])}</span>${H.h[i].map(c=>ch(c,'rs')).join('')}</div>`).join('')}</div>`:''}<div class="p ${(live&&H.turn==my&&my>=0)||myDeal||askMe||optAsk?'turn':''}">${me_}</div>`);
+ if(!(f&&['dbb','dan','bta','rt','dwl'].includes(f.id)&&m.contains(f)))put(m,`<div class="tbl" style="--s:${sz.toFixed(1)};--cw:${cw.toFixed(2)}cqw;--oy:${oy}cqw">${seats}<div class="mid">${board}</div><div class="info">${isNP?`<div style="font-size:12px">Card to beat${[0,2,8].includes(H.top%13)?' (wild = Ace)':''} · Wild: <b style="white-space:nowrap">2s 4s 10s ★</b></div>`:''}<div style="font-size:16px"><i class="ch"></i><b>Pot ${pot}</b></div>${isBts&&!H.done&&H.stage!='bet'?`<div style="font-size:12px">${H.stage=='skip'?`No bet: ${esc(H.why)} · `:''}next player in <span data-cd="${H.nextAt||0}"></span></div>`:''}${isSyn&&!H.done?`<div style="font-size:12px">Round ${H.round}${H.stage=='reveal'?` · next round in <span data-cd="${H.nextAt||0}"></span>`:''}</div>`:''}<div style="font-size:12px">${S.hold=='host'?'<b style="color:#ffd54a">⏸ Paused by the host</b><br>':S.hold=='seats'?`<b style="color:#ffd54a">⏸ Waiting for the host to seat ${esc(Object.keys(S.pend).join(', '))}</b><br>`:''}${H?esc(H.msg):''}${O?`<br>${esc(oName)} starts in <span data-cd="${O.until}"></span> · ${oIn} in${oIn<O.who.length?`, ${O.who.length-oIn} out`:''}`:S.again?`<br>Play again? ${Object.keys(S.again.yes).length} in so far <span data-cd="${S.again.until}"></span>`:!live&&S.dealDl&&dealer?`<br><span class="d">D</span>${esc(dealer)} deals next <span data-cd="${S.dealDl}"></span>`:!live&&!S.dealDl?'<br>Waiting for players':''}</div></div></div>${isNP?`<div class="p"><b>Cards flipped</b>${H.ps.map(i=>{const up=H.h[i].filter(c=>c!=null),dn=7-up.length;return`<div class="row" style="margin-top:3px;opacity:${H.fold[i]?.4:1}"><span style="width:84px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${H.best==i&&!H.fold[i]?'👑 ':''}${esc(S.seats[i])}</span><span>${up.map(c=>ch(c,'rs')).join('')}${'<i class="c b xs" style="margin:1px 2px"></i>'.repeat(dn)}</span>${H.cat[i]?`<small>${esc(H.cat[i])}${H.fold[i]?' · out':''}</small>`:H.fold[i]?'<small>out</small>':''}</div>`}).join('')}</div>`:''}${isDraw&&H.done&&H.show?`<div class="p"><b>Hands</b>${H.ps.filter(i=>!H.fold[i]).map(i=>`<div class="row" style="margin-top:2px"><span style="width:90px;overflow:hidden;text-overflow:ellipsis">${esc(S.seats[i])}</span>${H.h[i].map(c=>ch(c,'rs')).join('')}</div>`).join('')}</div>`:''}<div class="p ${(live&&H.turn==my&&my>=0)||myDeal||askMe||optAsk?'turn':''}">${me_}</div>`);
  if(myDeal&&lastDeal!==S.dealDl){play('yourdeal',()=>beep(523,.12));buzz([200,100,200])}lastDeal=myDeal?S.dealDl:0;
  // your turn: a ding and a short buzz, once per decision
  const canAct=H&&!H.done&&my>=0&&H.turn==my&&(isSyn?H.stage=='play'&&H.lives[my]>0:isBts?H.stage=='bet'&&inB:inH),tk=canAct?H.id+':'+(H.nact||0)+':'+H.stage:'';
