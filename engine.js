@@ -294,9 +294,9 @@ function createTable(saved, {now = Date.now, random = Math.random, shuffle = cry
   function npBet(flipper) {
     const H = S.hand, lv = npLive(), can = lv.filter(i => !H.allin[i]); H.bet = {}; H.ps.forEach(i => H.bet[i] = 0);
     H.cur = 0; H.acted = {}; H.minR = S.ante;
-    if (can.length < 2) return npNextFlipper(flipper);
-    // whoever just took the lead decides first: bet or check
-    H.stage = 'bet'; H.turn = H.allin[flipper] ? nxt(flipper) : flipper; H.nact = (H.nact || 0) + 1;
+    // only the flipper who just took the lead can start a betting round (Bet or No Bet)
+    if (can.length < 2 || H.allin[flipper]) return npNextFlipper(flipper);
+    H.stage = 'bet'; H.turn = flipper; H.nact = (H.nact || 0) + 1;
   }
   // which of a player's seven cards are face up (hands from before this was tracked: the first `up` cards)
   function npOpen(i) { const H = S.hand; H.open = H.open || {}; return H.open[i] = H.open[i] || H.h[i].map((c, k) => k < H.up[i] ? 1 : 0) }
@@ -323,6 +323,8 @@ function createTable(saved, {now = Date.now, random = Math.random, shuffle = cry
     const H = S.hand, lv = npLive(); if (lv.length == 1) return finish(lv);
     npLeader();
     if (H.stage == 'flip') return npNextFlipper(H.turn);
+    // the leader chose No Bet (checked, or ran out of time): nobody else may bet, the next player flips
+    if (H.cur == 0) { const who = S.seats[H.last]; npNextFlipper(H.last); if (H.stage == 'flip') H.msg = who + ': no bet · ' + H.msg; return }
     const can = lv.filter(i => !H.allin[i]);
     if (!can.every(i => H.acted[i] && H.bet[i] == H.cur)) { H.turn = nxt(H.turn); return }
     npNextFlipper(H.last);

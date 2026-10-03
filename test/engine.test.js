@@ -949,3 +949,29 @@ test('7 Card No Peek: every time someone takes the lead, they get to bet (hundre
   }
   assert.ok(leads > 150, 'checked ' + leads + ' times someone took the lead');
 });
+
+test('7 Card No Peek: only the new leader can start betting; No Bet goes straight to the next flipper', () => {
+  let nob = 0, bets = 0;
+  for (let g = 1; g <= 60; g++) {
+    const c = clock(); let seed = g * 104729; const random = () => (seed = seed * 16807 % 2147483647) / 2147483647;
+    const t = createTable(null, {now: c, random, shuffle: () => { const d = [...Array(52).keys()]; for (let i = 51; i > 0; i--) { const j = random() * (i + 1) | 0; [d[i], d[j]] = [d[j], d[i]] } return d }});
+    for (const n of ['A', 'B', 'C', 'D']) { t.player(n, {t: 'sit'}); t.host({op: 'seat', name: n}) }
+    const s = t.state(), d = s.seats[s.dealer]; t.player(d, {t: 'game', game: 'nopeek'}); t.player(d, {t: 'deal', ante: 100});
+    const H = s.hand;
+    for (let k = 0; k < 400 && !H.done; k++) {
+      const n = s.seats[H.turn], i = H.turn;
+      if (H.stage == 'flip') { t.player(n, {t: 'act', a: 'flip'}); continue }
+      assert.equal(H.cur, 0); assert.equal(H.best, i, 'the betting round opens with the leader');
+      if (g % 2) {
+        t.player(n, {t: 'act', a: 'call'}); nob++;                                  // No Bet
+        if (!H.done) { assert.equal(H.stage, 'flip', 'No Bet: nobody else bets, flipping goes on'); assert.notEqual(H.turn, i); assert.match(H.msg, /no bet/) }
+      } else {
+        t.player(n, {t: 'act', a: 'raise', amt: 100}); bets++;
+        assert.equal(H.cur, 100); assert.notEqual(H.turn, i, 'after a bet the others call, raise or fold');
+        for (let q = 0; q < 10 && H.stage == 'bet' && !H.done; q++) t.player(s.seats[H.turn], {t: 'act', a: 'call'});
+        if (!H.done) assert.equal(H.stage, 'flip');
+      }
+    }
+  }
+  assert.ok(nob > 20 && bets > 20, nob + ' no-bets, ' + bets + ' bets');
+});
