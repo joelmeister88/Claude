@@ -1,7 +1,7 @@
 # Grocery list (drafted 2026-10-05)
 
 Covers: #2 Mississippi Chicken & Potatoes, #5 Lawry's Garlic Butter Steak
-Bites, #7 Bottom of the Barrel Chili, plus cheese tortellini with Alfredo,
+Bites, #7 Bottom of the Barrel Chili, #14 Dunkaroo Dip, plus cheese tortellini with Alfredo,
 frozen pizzas, spaghetti with meat sauce, and "white people tacos".
 Built from the fridge/freezer/pantry photos. Items marked (check) may already
 be at home; see the check-at-home list.
@@ -19,6 +19,7 @@ be at home; see the check-at-home list.
 - [ ] Garlic, 1 head (about 5 cloves needed)
 - [ ] Fresh rosemary and fresh thyme (1 tbsp each)
 - [ ] Taco toppings: lettuce, tomato (assumed, see note)
+- [ ] Apples (optional dipper for Dunkaroo Dip)
 
 ## Dairy and refrigerated
 - [ ] Shredded mozzarella, 1 cup (Mississippi chicken)
@@ -26,6 +27,8 @@ be at home; see the check-at-home list.
 - [ ] Cheese tortellini, 1 or 2 refrigerated packs
 - [ ] Alfredo sauce, 1 jar (or make from heavy cream + parmesan)
 - [ ] Sour cream (taco topping; check the fridge tub)
+- [ ] Vanilla yogurt, 1⅓ cups (Dunkaroo Dip; one 5-6 oz cup won't do, get a 32 oz tub or ~3 cups)
+- [ ] Cool Whip, 2 cups (one 8 oz tub; Dunkaroo Dip)
 
 ## Frozen
 - [ ] Frozen pizzas, 3 or 4 (you only have Domino's leftovers)
@@ -43,6 +46,12 @@ be at home; see the check-at-home list.
 - [ ] Spaghetti (you have it) and a jar of meat sauce or pasta sauce
       (you have 2 Great Value tomato basil garlic jars)
 - [ ] Dried chili peppers, 1/2 cup (optional; hard to find)
+- [ ] Funfetti cake mix, 1 box (Dunkaroo Dip; check, the Betty Crocker box on the bottom
+      pantry shelf may not be Funfetti)
+- [ ] Vanilla extract, 1 tsp (Dunkaroo Dip; none seen)
+- [ ] Sprinkles (Dunkaroo Dip garnish)
+- [ ] Dippers for Dunkaroo Dip: animal crackers, Teddy Grahams, Nilla Wafers,
+      pretzels (you already have graham crackers)
 
 ## Check at home before buying
 - Spices: chili powder (4 tbsp), cumin, oregano, paprika, sea salt, cayenne,
@@ -61,6 +70,8 @@ seen), canned tomatoes, tomato paste (1), pinto and kidney beans, shredded
 cheddar, mozzarella (none), milk.
 
 ## Notes
+- Dunkaroo Dip: the cake mix goes in dry; the recipe says chill 2 hours before
+  serving. Optionally heat-treat the mix first (see the recipe file).
 - "White people tacos" isn't saved yet; I assumed ground beef + taco seasoning +
   shells + cheese + lettuce/tomato + sour cream. Tell me your version and I'll
   fix the list and save it as a recipe.
