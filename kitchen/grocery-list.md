@@ -56,6 +56,18 @@ be at home; see the check-at-home list.
 - [ ] Dippers for Dunkaroo Dip: animal crackers, Teddy Grahams, Nilla Wafers,
       pretzels (you already have graham crackers)
 
+## Household and breakfast items (user's own list, added 2026-10-05)
+Only added the ones I did not see in the photos.
+- [ ] Raisin Bran Crunch (no cereal seen)
+- [ ] French vanilla coffee creamer (only a Snickers creamer seen)
+- [ ] Oat milk (none seen)
+- [ ] Fettuccine noodles (no fettuccine seen; you have lasagna, rotini, elbows, egg noodles)
+- [ ] Sugar (no sugar seen)
+- [ ] Freezer bags (check first: a zip-bag organizer in the pantry was unreadable)
+- [ ] Sandwich bags (check first: same organizer; may already have some)
+Skipped as already seen: olive oil (Carlini bottle in the pantry), spaghetti
+noodles (Great Value spaghetti/linguine, 1 to 2 boxes plus a tall container).
+
 ## Check at home before buying
 - Spices: chili powder (4 tbsp), cumin, oregano, paprika, sea salt, cayenne,
   garlic powder (McCormick shakers couldn't be read in the photos)

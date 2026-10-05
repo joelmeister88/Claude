@@ -69,3 +69,7 @@ potatoes, peanut butter.
 - Spaghetti with meat sauce
 - Tacos: ground beef, taco seasoning, cheese, lettuce, diced tomatoes, sour cream, 10" soft shells, sometimes Mexican rice (see recipes/tacos.md)
 - Cheese tortellini with Alfredo sauce (Jesi's request, 2026-10-05)
+
+## Items the user regularly wants on the list (2026-10-05)
+Raisin Bran Crunch, olive oil, French vanilla creamer, oat milk, spaghetti
+noodles, fettuccine noodles, sugar, freezer bags, sandwich bags.
