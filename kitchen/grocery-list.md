@@ -25,6 +25,8 @@ be at home; see the check-at-home list.
 - [ ] Shredded mozzarella, 1 cup (Mississippi chicken)
 - [ ] Sharp cheddar, shredded (chili topping; check, you have shredded cheddar)
 - [ ] Cheese tortellini, 1 or 2 refrigerated packs
+- [ ] Chicken for the tortellini: you already have Tyson grilled chicken breast strips
+      (frozen, fully cooked) and frozen chicken pieces, so likely nothing to buy
 - [ ] Alfredo sauce, 1 jar (or make from heavy cream + parmesan)
 - [ ] Sour cream (taco topping; check the fridge tub)
 - [ ] Vanilla yogurt, 1⅓ cups (Dunkaroo Dip; one 5-6 oz cup won't do, get a 32 oz tub or ~3 cups)
@@ -79,5 +81,6 @@ cheddar, mozzarella (none), milk.
   sauce, so check the freezer for about 2 lb total.
 - Chili: I assumed the Bottom of the Barrel Chili as written (2 lb round + 2 lb
   chuck). Using 4 lb ground beef instead is allowed by the recipe.
-- Jesi's cheese tortellini with Alfredo: just tortellini + Alfredo sauce was
-  assumed. Tell me if she wants add-ins (chicken, broccoli, bacon, spinach).
+- Jesi's cheese tortellini with Alfredo (saved as
+  `recipes/cheese-tortellini-alfredo-with-chicken.md`): tortellini + Alfredo
+  sauce + chicken. Any other add-ins (broccoli, bacon, spinach)? Not added.
