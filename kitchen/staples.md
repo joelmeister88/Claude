@@ -63,3 +63,9 @@ potatoes, peanut butter.
 - Plenty of cheese, frozen proteins, canned goods and pasta on hand. Don't
   re-buy these unless something is clearly running low.
 - Perishables to watch: milk, eggs, salad kits, Brussels sprouts, yogurt.
+
+## Usual quick meals (from the user)
+- Frozen pizzas (a few on hand for quick meals)
+- Spaghetti with meat sauce
+- "White people tacos" (version not yet recorded)
+- Cheese tortellini with Alfredo sauce (Jesi's request, 2026-10-05)
