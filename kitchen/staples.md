@@ -67,5 +67,5 @@ potatoes, peanut butter.
 ## Usual quick meals (from the user)
 - Frozen pizzas (a few on hand for quick meals)
 - Spaghetti with meat sauce
-- "White people tacos" (version not yet recorded)
+- Tacos: ground beef, taco seasoning, cheese, lettuce, diced tomatoes, sour cream, 10" soft shells, sometimes Mexican rice (see recipes/tacos.md)
 - Cheese tortellini with Alfredo sauce (Jesi's request, 2026-10-05)

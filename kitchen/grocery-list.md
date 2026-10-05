@@ -18,7 +18,7 @@ be at home; see the check-at-home list.
 - [ ] 1 sweet onion (chili); taco toppings below
 - [ ] Garlic, 1 head (about 5 cloves needed)
 - [ ] Fresh rosemary and fresh thyme (1 tbsp each)
-- [ ] Taco toppings: lettuce, tomato (assumed, see note)
+- [ ] Tacos: 1 head lettuce (or bagged), 2-3 tomatoes to dice
 - [ ] Apples (optional dipper for Dunkaroo Dip)
 
 ## Dairy and refrigerated
@@ -42,7 +42,8 @@ be at home; see the check-at-home list.
 - [ ] Ranch seasoning packet, 1 (Mississippi chicken, half used)
 - [ ] Lawry's Coarse Ground With Parsley Garlic Salt (steak bites)
 - [ ] Peanut butter (1 tbsp for the chili; none seen)
-- [ ] Taco shells or tortillas + taco seasoning (see note)
+- [ ] Tacos: soft shells, 10 inch (1 pack) + taco seasoning (1-2 packets)
+- [ ] Mexican rice (optional side): box/seasoned rice mix, or rice + tomato sauce
 - [ ] Spaghetti (you have it) and a jar of meat sauce or pasta sauce
       (you have 2 Great Value tomato basil garlic jars)
 - [ ] Dried chili peppers, 1/2 cup (optional; hard to find)
@@ -72,9 +73,10 @@ cheddar, mozzarella (none), milk.
 ## Notes
 - Dunkaroo Dip: the cake mix goes in dry; the recipe says chill 2 hours before
   serving. Optionally heat-treat the mix first (see the recipe file).
-- "White people tacos" isn't saved yet; I assumed ground beef + taco seasoning +
-  shells + cheese + lettuce/tomato + sour cream. Tell me your version and I'll
-  fix the list and save it as a recipe.
+- Tacos (saved as `recipes/tacos.md`): ground beef, taco seasoning, shredded
+  cheese (you have cheddar), lettuce, diced tomatoes, sour cream, 10 inch soft
+  shells, maybe Mexican rice. Ground beef is also needed for the spaghetti meat
+  sauce, so check the freezer for about 2 lb total.
 - Chili: I assumed the Bottom of the Barrel Chili as written (2 lb round + 2 lb
   chuck). Using 4 lb ground beef instead is allowed by the recipe.
 - Jesi's cheese tortellini with Alfredo: just tortellini + Alfredo sauce was
